@@ -1,21 +1,65 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
+
+// import countriesData from "world-countries"; // No usar, solo GeoJSON
+import { GeoJSON, MapContainer as LeafletMap, TileLayer } from "react-leaflet";
+import { Tooltip, useMap } from "react-leaflet";
 import { useEffect, useState } from "react";
 
 import dynamic from "next/dynamic";
-import { MapContainer as LeafletMap, GeoJSON, useMapEvents } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import { feature } from "topojson-client";
+import { useMapEvents } from "react-leaflet";
+// --- Modo 2D: Mostrar nombre del país en hover ---
+import { useRef } from "react";
 
 const Globe = dynamic<any>(() => import("react-globe.gl"), { ssr: false, loading: () => <div className="text-center">Cargando globo...</div> });
 
-const CONTINENTS_EN = [
-  { name: "Africa", lat: 2, lng: 17 },
-  { name: "North America", lat: 54, lng: -105 },
-  { name: "South America", lat: -15, lng: -60 },
+const CONTINENTS = [
+  { name: "África", lat: 2, lng: 17 },
+  { name: "América del Norte", lat: 54, lng: -105 },
+  { name: "América del Sur", lat: -15, lng: -60 },
   { name: "Asia", lat: 34, lng: 100 },
-  { name: "Europe", lat: 54, lng: 15 },
-  { name: "Oceania", lat: -22, lng: 140 },
+  { name: "Europa", lat: 54, lng: 15 },
+  { name: "Oceanía", lat: -22, lng: 140 },
 ];
+
+const CONTINENTS_EN = [
+  { name: "NORTH AMERICA", lat: 55, lng: -100 },
+  { name: "SOUTH AMERICA", lat: -18, lng: -58 },
+  { name: "EUROPE", lat: 54, lng: 20 },
+  { name: "AFRICA", lat: 2, lng: 22 },
+  { name: "ASIA", lat: 45, lng: 100 },
+  { name: "AUSTRALIA", lat: -25, lng: 135 },
+  { name: "ANTARCTICA", lat: -82, lng: 0 },
+];
+
+const CONTINENT_LABEL_OFFSETS: Record<string, { x: number; y: number }> = {
+  "NORTH AMERICA": { x: -90, y: -30 },
+  "SOUTH AMERICA": { x: -90, y: 0 },
+  "EUROPE": { x: -60, y: -30 },
+  "AFRICA": { x: -60, y: 0 },
+  "ASIA": { x: -90, y: -30 },
+  "AUSTRALIA": { x: -90, y: 0 },
+  "ANTARCTICA": { x: -80, y: 0 },
+};
+
+function getCentroid(coords: any[]): [number, number] {
+  // Solo soporta MultiPolygon y Polygon
+  let all: any[] = [];
+  if (Array.isArray(coords[0][0][0])) {
+    // MultiPolygon
+    coords.forEach((poly: any) => {
+      poly[0].forEach((c: any) => all.push(c));
+    });
+  } else {
+    // Polygon
+    coords[0].forEach((c: any) => all.push(c));
+  }
+  const lats = all.map((c: any) => c[1]);
+  const lngs = all.map((c: any) => c[0]);
+  return [lats.reduce((a, b) => a + b, 0) / lats.length, lngs.reduce((a, b) => a + b, 0) / lngs.length];
+}
 
 // Generador de estrellas (canvas background)
 function StarBackground() {
@@ -45,45 +89,48 @@ function StarBackground() {
 
 function ContinentLabels2D({ zoom }: { zoom: number }) {
   if (zoom < 3.5) {
-    return CONTINENTS_EN.map((c) => (
-      <div
-        key={c.name}
-        className="pointer-events-none select-none font-extrabold text-2xl md:text-4xl text-white/90 drop-shadow-lg"
-        style={{
-          position: "absolute",
-          left: `calc(${((c.lng + 180) / 360) * 100}% - 50px)` ,
-          top: `calc(${((90 - c.lat) / 180) * 100}% - 20px)` ,
-          zIndex: 1000,
-          textShadow: "0 2px 8px #000, 0 0 2px #000"
-        }}
-      >
-        {c.name.toUpperCase()}
-      </div>
-    ));
+    return CONTINENTS_EN.map((c) => {
+      const offset = CONTINENT_LABEL_OFFSETS[c.name] || { x: -50, y: -20 };
+      return (
+        <div
+          key={c.name}
+          className="pointer-events-none select-none font-extrabold text-2xl md:text-4xl text-white/90 drop-shadow-lg"
+          style={{
+            position: "absolute",
+            left: `calc(${((c.lng + 180) / 360) * 100}% + ${offset.x}px)` ,
+            top: `calc(${((90 - c.lat) / 180) * 100}% + ${offset.y}px)` ,
+            zIndex: 1000,
+            textShadow: "0 2px 8px #000, 0 0 2px #000"
+          }}
+        >
+          {c.name.toUpperCase()}
+        </div>
+      );
+    });
   }
   return null;
 }
 
 function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
   useMapEvents({
-    zoomend: (e: any) => setZoom(e.target.getZoom()),
-    zoomstart: (e: any) => setZoom(e.target.getZoom()),
-    moveend: (e: any) => setZoom(e.target.getZoom()),
+    zoomend: (e) => setZoom(e.target.getZoom()),
+    zoomstart: (e) => setZoom(e.target.getZoom()),
+    moveend: (e) => setZoom(e.target.getZoom()),
   });
   return null;
 }
 
-// --- Modo 2D: Mostrar nombre del país en hover ---
+
 function CountryMap2D({ geojson }: { geojson: any }) {
   const [zoom, setZoom] = useState(2);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
 
   // Custom onEachFeature to handle hover
-  function onEachCountry(feature: unknown, layer: any) {
+  function onEachCountry(feature: any, layer: any) {
     layer.on({
       mouseover: (e: any) => {
-        setHoveredCountry(feature && (feature as any).properties.name);
+        setHoveredCountry(feature.properties.name);
         if (e.originalEvent) {
           setHoverPos({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
         }
@@ -100,21 +147,24 @@ function CountryMap2D({ geojson }: { geojson: any }) {
   return (
     <div className="fixed inset-0 w-full h-full flex items-center justify-center bg-black">
       <LeafletMap
-// @ts-expect-error center type
-        center={[20, 0]}
+        center={[20, 0] as any}
         zoom={2}
         minZoom={2}
-// @ts-expect-error maxBounds type
-        maxBounds={[[-90, -180], [90, 180]]}
+        maxBounds={[[-90, -180], [90, 180]] as any}
         style={{ width: "100vw", height: "100vh", background: "#000" }}
         scrollWheelZoom={true}
         zoomControl={true}
         attributionControl={false}
       >
         <MapZoomListener setZoom={setZoom} />
-// @ts-expect-error style prop type
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          // @ts-ignore
+          attribution="&copy; OpenStreetMap contributors"
+        />
         <GeoJSON
           data={geojson}
+          // @ts-ignore
           style={() => ({ color: "#222", weight: 1, fillOpacity: 0 })}
           onEachFeature={onEachCountry}
         />
@@ -134,8 +184,10 @@ function CountryMap2D({ geojson }: { geojson: any }) {
 }
 
 export default function GlobeComponent() {
-  const [countries, setCountries] = useState<unknown[]>([]);
-  const [geojson, setGeojson] = useState<unknown | null>(null);
+  const [countries, setCountries] = useState<any[]>([]);
+  const [labels, setLabels] = useState<any[]>([]);
+  const [zoom, setZoom] = useState(1.5);
+  const [geojson, setGeojson] = useState<any>(null);
   const [mode2D, setMode2D] = useState(false);
 
   useEffect(() => {
@@ -144,8 +196,18 @@ export default function GlobeComponent() {
       .then((geojson) => {
         setCountries(geojson.features);
         setGeojson(geojson);
+        // No generar etiquetas de ciudades ni detalles, solo países
+        setLabels([]);
       });
   }, []);
+
+  const handleZoom = (camera: any) => {
+    if (camera && camera.position) {
+      setZoom(camera.position.length());
+    }
+  };
+
+  const visibleLabels: any[] = [];
 
   // Custom label renderer para fondo blanco
   const labelDotRenderer = (label: any) => {
@@ -187,6 +249,8 @@ export default function GlobeComponent() {
           atmosphereAltitude={0.01}
           showAtmosphere={false}
           animateIn={false}
+          onGlobeReady={handleZoom}
+          onZoom={handleZoom}
           labelsData={[]}
           labelLat={(d: any) => d.lat}
           labelLng={(d: any) => d.lng}
