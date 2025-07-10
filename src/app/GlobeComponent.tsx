@@ -558,11 +558,11 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       <div className="mb-1">
         <span className="text-gray-700">Population:</span> {typeof population === 'number' ?
           <>
-            {population.toLocaleString()} {populationYearStatic ? <span className="text-gray-500">({populationYearStatic})</span> : <span className="text-gray-500">(año desconocido)</span>}
+            {population.toLocaleString()} {populationYearStatic ? <span className="text-gray-500">({populationYearStatic})</span> : null}
           </> :
           loadingApi ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
           apiPopulation ? <>
-            {apiPopulation.toLocaleString()} {populationYear ? <span className="text-gray-500">({populationYear})</span> : <span className="text-gray-500">(año desconocido)</span>}
+            {apiPopulation.toLocaleString()} {populationYear ? <span className="text-gray-500">({populationYear})</span> : null}
           </> :
           apiError ? <span className="text-red-500 ml-2">{apiError}</span> : population}
       </div>
@@ -570,12 +570,12 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         <span className="text-gray-700">GDP (USD):</span> {loadingGDP ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
           (typeof apiGDP === 'number' ?
             <>
-              ${apiGDP.toLocaleString()} <span className="text-gray-500">({formatLargeNumber(apiGDP)})</span> {gdpYear ? <span className="text-gray-500">({gdpYear})</span> : <span className="text-gray-500">(año desconocido)</span>}
+              ${apiGDP.toLocaleString()} <span className="text-gray-500">({formatLargeNumber(apiGDP)})</span> {gdpYear ? <span className="text-gray-500">({gdpYear})</span> : null}
             </> :
             gdpError ? <span className="text-red-500 ml-2">{gdpError}</span> :
             gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id] ?
               <>
-                ${gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id].toLocaleString()} <span className="text-gray-500">({formatLargeNumber(gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id])})</span> <span className="text-gray-500">(año desconocido)</span>
+                ${gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id].toLocaleString()} <span className="text-gray-500">({formatLargeNumber(gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id])})</span> 
               </> :
             "Desconocido")}
       </div>
