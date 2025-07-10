@@ -21,6 +21,12 @@ type GlobeMethods = typeof GlobeImport;
 
 // Cache en memoria para poblaciones obtenidas por API
 const populationCache: Record<string, number> = {};
+// GDP cache en memoria
+const gdpCache: Record<string, number> = {};
+// Inflación cache en memoria
+const inflationCache: Record<string, number> = {};
+// Tarifa cache en memoria (por ISO3)
+const tariffByIso3: Record<string, number> = {};
 // Helper para cachear en localStorage
 function getPopulationFromStorage(countryName: string): number | null {
   try {
@@ -34,14 +40,127 @@ function setPopulationInStorage(countryName: string, value: number) {
     localStorage.setItem(`populationCache:${countryName}`, value.toString());
   } catch {}
 }
+// GDP helpers para localStorage
+function getGDPFromStorage(countryName: string): number | null {
+  try {
+    const val = localStorage.getItem(`gdpCache:${countryName}`);
+    if (val) return parseFloat(val);
+  } catch {}
+  return null;
+}
+function setGDPInStorage(countryName: string, value: number) {
+  try {
+    localStorage.setItem(`gdpCache:${countryName}`, value.toString());
+  } catch {}
+}
+// Helper para cachear inflación en localStorage
+function getInflationFromStorage(countryName: string): number | null {
+  try {
+    const val = localStorage.getItem(`inflationCache:${countryName}`);
+    if (val) return parseFloat(val);
+  } catch {}
+  return null;
+}
+function setInflationInStorage(countryName: string, value: number) {
+  try {
+    localStorage.setItem(`inflationCache:${countryName}`, value.toString());
+  } catch {}
+}
+// Helper para cachear tarifa en localStorage
+function getTariffFromStorage(countryName: string): number | null {
+  try {
+    const val = localStorage.getItem(`tariffCache:${countryName}`);
+    if (val) return parseFloat(val);
+  } catch {}
+  return null;
+}
+function setTariffInStorage(countryName: string, value: number) {
+  try {
+    localStorage.setItem(`tariffCache:${countryName}`, value.toString());
+  } catch {}
+}
+// Helper para cachear tarifas globales en localStorage
+function getTariffMapFromStorage(): Record<string, number> | null {
+  try {
+    const val = localStorage.getItem('tariffByIso3');
+    if (val) return JSON.parse(val);
+  } catch {}
+  return null;
+}
+function setTariffMapInStorage(map: Record<string, number>) {
+  try {
+    localStorage.setItem('tariffByIso3', JSON.stringify(map));
+  } catch {}
+}
+
+// Helper para formatear números grandes en palabras (inglés)
+function formatLargeNumber(num: number): string {
+  if (num >= 1e12) return (num / 1e12).toFixed(2) + ' trillion';
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + ' billion';
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + ' million';
+  if (num >= 1e3) return (num / 1e3).toFixed(2) + ' thousand';
+  return num.toString();
+}
+
+// Helper para formatear inflación en palabras
+function formatInflationWord(value: number): string {
+  if (value < 0) return 'deflation';
+  if (value < 2) return 'very low';
+  if (value < 5) return 'moderate';
+  if (value < 10) return 'high';
+  if (value < 50) return 'very high';
+  return 'hyperinflation';
+}
+
+// Helper para formatear tarifa en palabras
+function formatTariffWord(value: number): string {
+  if (value < 1) return 'very low';
+  if (value < 5) return 'low';
+  if (value < 10) return 'moderate';
+  if (value < 20) return 'high';
+  return 'very high';
+}
 
 // --- Popup modular para país (usable en 2D y 3D) ---
 
-function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName }: { country: any, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string }) {
+// Mapeo de nombres especiales para World Bank
+const WORLD_BANK_NAME_ALIASES: Record<string, string[]> = {
+  "United States": ["United States", "United States of America", "USA", "US"],
+  "Russia": ["Russian Federation", "Russia"],
+  "South Korea": ["Korea, Rep.", "South Korea", "Korea, Republic of"],
+  "North Korea": ["Korea, Dem. People's Rep.", "North Korea", "Korea, Democratic People's Republic of"],
+  "Iran": ["Iran, Islamic Rep.", "Iran"],
+  "Egypt": ["Egypt, Arab Rep.", "Egypt"],
+  "Vietnam": ["Viet Nam", "Vietnam"],
+  "Syria": ["Syrian Arab Republic", "Syria"],
+  "Venezuela": ["Venezuela, RB", "Venezuela"],
+  "Gambia": ["Gambia, The", "Gambia"],
+  "Bahamas": ["Bahamas, The", "Bahamas"],
+  "Yemen": ["Yemen, Rep.", "Yemen"],
+  "Congo": ["Congo, Rep.", "Congo"],
+  "Congo (Democratic Republic)": ["Congo, Dem. Rep.", "Congo (Democratic Republic)", "Democratic Republic of the Congo"],
+  "Lao PDR": ["Lao PDR", "Laos"],
+  "Brunei": ["Brunei Darussalam", "Brunei"],
+  // Puedes agregar más casos especiales aquí
+};
+
+function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName, gdpByCountry }: { country: any, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, gdpByCountry: Record<string, number> }) {
   const popupRef = useRef<HTMLDivElement>(null);
   const [apiPopulation, setApiPopulation] = useState<number | null>(null);
   const [loadingApi, setLoadingApi] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  // GDP states
+  const [apiGDP, setApiGDP] = useState<number | null>(null);
+  const [loadingGDP, setLoadingGDP] = useState(false);
+  const [gdpError, setGDPError] = useState<string | null>(null);
+  // Inflación states
+  const [apiInflation, setApiInflation] = useState<number | null>(null);
+  const [loadingInflation, setLoadingInflation] = useState(false);
+  const [inflationError, setInflationError] = useState<string | null>(null);
+  // Tarifa states
+  const [apiTariff, setApiTariff] = useState<number | null>(null);
+  const [loadingTariff, setLoadingTariff] = useState(false);
+  const [tariffError, setTariffError] = useState<string | null>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -158,6 +277,229 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
     }
   }, [countryName, population]);
 
+  // GDP logic
+  useEffect(() => {
+    // Usar el nombre del país en inglés
+    const countryName = country.properties?.name || country.properties?.NAME || country.id;
+    const iso2 = country.properties?.ISO_A2 || country.properties?.iso_a2 || country.properties?.iso2 || country.id;
+    const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
+    if (!countryName || typeof countryName !== 'string') {
+      setApiGDP(null);
+      setGDPError("No disponible");
+      setLoadingGDP(false);
+      return;
+    }
+    // Si ya está en cache en memoria o localStorage, úsala
+    if (gdpByCountry[countryName]) {
+      setApiGDP(gdpByCountry[countryName]);
+      setGDPError(null);
+      setLoadingGDP(false);
+      return;
+    }
+    if (gdpCache[countryName]) {
+      setApiGDP(gdpCache[countryName]);
+      setGDPError(null);
+      setLoadingGDP(false);
+      return;
+    }
+    const localGDP = getGDPFromStorage(countryName);
+    if (localGDP) {
+      gdpCache[countryName] = localGDP;
+      setApiGDP(localGDP);
+      setGDPError(null);
+      setLoadingGDP(false);
+      return;
+    }
+    setLoadingGDP(true);
+    setGDPError(null);
+    // World Bank API (busca por nombre de país)
+    fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
+      .then(res => res.json())
+      .then((data) => {
+        if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo buscar país");
+        // Buscar por nombre exacto y luego por alias (case-insensitive)
+        let found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+        if (!found) {
+          // Buscar por alias si existe (case-insensitive)
+          const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
+          for (const alias of aliases) {
+            found = data[1].find((c: any) => c.name && c.name.toLowerCase() === alias.toLowerCase());
+            if (found) break;
+          }
+        }
+        if (!found) {
+          // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
+          const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
+          found = data[1].find((c: any) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+        }
+        // Buscar por código ISO2 (2 letras)
+        if (!found && iso2 && typeof iso2 === 'string') {
+          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
+        }
+        // Buscar por código ISO3 (3 letras)
+        if (!found && iso3 && typeof iso3 === 'string') {
+          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
+        }
+        // Fallback manual para USA
+        if (!found && (countryName.toLowerCase().includes('united states') || (iso2 && iso2.toUpperCase() === 'US'))) {
+          found = data[1].find((c: any) => c.id === 'USA');
+        }
+        if (!found || !found.id) throw new Error("No se encontró el país en World Bank");
+        const countryId = found.id;
+        // Ahora sí, fetch GDP
+        return fetch(`https://api.worldbank.org/v2/country/${countryId}/indicator/NY.GDP.MKTP.CD?format=json&per_page=1`)
+          .then(res2 => res2.json())
+          .then((gdpData) => {
+            let gdp = null;
+            if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
+              gdp = gdpData[1][0].value;
+            }
+            if (typeof gdp === 'number') {
+              setApiGDP(gdp);
+              gdpCache[countryName] = gdp;
+              setGDPInStorage(countryName, gdp);
+            } else {
+              setGDPError("No disponible en API externa");
+            }
+          });
+      })
+      .catch((err) => {
+        setGDPError("No disponible en API externa");
+      })
+      .finally(() => setLoadingGDP(false));
+  }, [country, gdpByCountry]);
+
+  // Inflación logic
+  useEffect(() => {
+    setLoadingInflation(true);
+    setInflationError(null);
+    setApiInflation(null);
+    const countryName = country.properties?.name || country.properties?.NAME || country.id;
+    const iso2 = country.properties?.ISO_A2 || country.properties?.iso_a2 || country.properties?.iso2 || country.id;
+    const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
+    if (!countryName || typeof countryName !== 'string') {
+      setInflationError("No disponible");
+      setLoadingInflation(false);
+      return;
+    }
+    if (inflationCache[countryName]) {
+      setApiInflation(inflationCache[countryName]);
+      setInflationError(null);
+      setLoadingInflation(false);
+      return;
+    }
+    const localInflation = getInflationFromStorage(countryName);
+    if (localInflation) {
+      inflationCache[countryName] = localInflation;
+      setApiInflation(localInflation);
+      setInflationError(null);
+      setLoadingInflation(false);
+      return;
+    }
+    // Buscar el país en World Bank igual que GDP
+    fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
+      .then(res => res.json())
+      .then((data) => {
+        if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo buscar país");
+        let found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+        if (!found) {
+          const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
+          for (const alias of aliases) {
+            found = data[1].find((c: any) => c.name && c.name.toLowerCase() === alias.toLowerCase());
+            if (found) break;
+          }
+        }
+        if (!found) {
+          const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
+          found = data[1].find((c: any) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+        }
+        if (!found && iso2 && typeof iso2 === 'string') {
+          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
+        }
+        if (!found && iso3 && typeof iso3 === 'string') {
+          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
+        }
+        if (!found && (countryName.toLowerCase().includes('united states') || (iso2 && iso2.toUpperCase() === 'US'))) {
+          found = data[1].find((c: any) => c.id === 'USA');
+        }
+        if (!found || !found.id) throw new Error("No se encontró el país en World Bank");
+        const countryId = found.id;
+        // Ahora sí, fetch inflación
+        return fetch(`https://api.worldbank.org/v2/country/${countryId}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`)
+          .then(res2 => res2.json())
+          .then((inflationData) => {
+            let inflation = null;
+            if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
+              inflation = inflationData[1][0].value;
+            }
+            if (typeof inflation === 'number') {
+              setApiInflation(inflation);
+              inflationCache[countryName] = inflation;
+              setInflationInStorage(countryName, inflation);
+            } else {
+              setInflationError("No disponible en API externa");
+            }
+          });
+      })
+      .catch((err) => {
+        setInflationError("No disponible en API externa");
+      })
+      .finally(() => setLoadingInflation(false));
+  }, [country]);
+
+  // Tarifa logic
+  useEffect(() => {
+    setLoadingTariff(true);
+    setTariffError(null);
+    setApiTariff(null);
+    const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
+    if (!iso3 || typeof iso3 !== 'string') {
+      setTariffError("No disponible");
+      setLoadingTariff(false);
+      return;
+    }
+    // Si ya está en cache en memoria
+    if (tariffByIso3[iso3]) {
+      setApiTariff(tariffByIso3[iso3]);
+      setTariffError(null);
+      setLoadingTariff(false);
+      return;
+    }
+    // Si ya está en localStorage
+    const tariffMap = getTariffMapFromStorage();
+    if (tariffMap && tariffMap[iso3]) {
+      tariffByIso3[iso3] = tariffMap[iso3];
+      setApiTariff(tariffMap[iso3]);
+      setTariffError(null);
+      setLoadingTariff(false);
+      return;
+    }
+    // Fetch global de tarifas
+    fetch('https://api.worldbank.org/v2/country/all/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=300&date=2022')
+      .then(res => res.json())
+      .then((data) => {
+        if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo obtener tarifas globales");
+        const map: Record<string, number> = {};
+        data[1].forEach((item: any) => {
+          if (item.countryiso3code && typeof item.value === 'number') {
+            map[item.countryiso3code] = item.value;
+          }
+        });
+        Object.assign(tariffByIso3, map);
+        setTariffMapInStorage(map);
+        if (map[iso3]) {
+          setApiTariff(map[iso3]);
+          setTariffError(null);
+        } else {
+          setTariffError("No disponible en API externa");
+        }
+      })
+      .catch(() => {
+        setTariffError("No disponible en API externa");
+      })
+      .finally(() => setLoadingTariff(false));
+  }, [country]);
+
   return (
     <div
       ref={popupRef}
@@ -173,6 +515,37 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
           loadingApi ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
           apiPopulation ? apiPopulation.toLocaleString() :
           apiError ? <span className="text-red-500 ml-2">{apiError}</span> : population}
+      </div>
+      <div className="mb-1">
+        <span className="text-gray-700">GDP (USD):</span> {loadingGDP ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
+          (typeof apiGDP === 'number' ?
+            <>
+              ${apiGDP.toLocaleString()} <span className="text-gray-500">({formatLargeNumber(apiGDP)})</span>
+            </> :
+            gdpError ? <span className="text-red-500 ml-2">{gdpError}</span> :
+            gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id] ?
+              <>
+                ${gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id].toLocaleString()} <span className="text-gray-500">({formatLargeNumber(gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id])})</span>
+              </> :
+            "Desconocido")}
+      </div>
+      <div className="mb-1">
+        <span className="text-gray-700">Inflation:</span> {loadingInflation ? <span className="italic text-gray-500 ml-2">Loading...</span> :
+          (typeof apiInflation === 'number' ?
+            <>
+              {apiInflation.toFixed(2)}% <span className="text-gray-500">({formatInflationWord(apiInflation)})</span>
+            </> :
+            inflationError ? <span className="text-red-500 ml-2">{inflationError}</span> :
+            "Unknown")}
+      </div>
+      <div className="mb-1">
+        <span className="text-gray-700">Tariff:</span> {loadingTariff ? <span className="italic text-gray-500 ml-2">Loading...</span> :
+          (typeof apiTariff === 'number' ?
+            <>
+              {apiTariff.toFixed(2)}% <span className="text-gray-500">({formatTariffWord(apiTariff)})</span>
+            </> :
+            tariffError ? <span className="text-red-500 ml-2">{tariffError}</span> :
+            "Unknown")}
       </div>
       {/* Aquí puedes agregar más info del país */}
     </div>
@@ -398,7 +771,7 @@ function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
 }
 
 
-function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLabelsComponent }: { geojson: any, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, ContinentLabelsComponent?: any }) {
+function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLabelsComponent, gdpByCountry }: { geojson: any, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, ContinentLabelsComponent?: any, gdpByCountry: Record<string, number> }) {
   const [zoom, setZoom] = useState(2);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -514,6 +887,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
           onClose={() => setSelectedCountry(null)}
           popByCountry={popByCountry}
           normalizeCountryName={normalizeCountryName}
+          gdpByCountry={gdpByCountry}
         />
       )}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Fuente de países: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
@@ -523,7 +897,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
 
 // --- Globe 3D: selección de país y popup ---
 
-function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick }: { countries: any[], popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, onContinentClick: (name: string) => void }) {
+function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick, gdpByCountry }: { countries: any[], popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, onContinentClick: (name: string) => void, gdpByCountry: Record<string, number> }) {
   const [selectedCountry, setSelectedCountry] = useState<any>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const globeRef = useRef<any>(null);
@@ -656,6 +1030,7 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
           onClose={() => setSelectedCountry(null)}
           popByCountry={popByCountry}
           normalizeCountryName={normalizeCountryName}
+          gdpByCountry={gdpByCountry}
         />
       )}
       {selectedContinent && selectedContinent !== "ANTARCTICA" && (
@@ -688,7 +1063,7 @@ export default function GlobeComponent() {
   const [geojson, setGeojson] = useState<any>(null);
   const [mode2D, setMode2D] = useState(false);
   const [popByCountry, setPopByCountry] = useState<Record<string, number>>({});
-
+  const [gdpByCountry, setGDPByCountry] = useState<Record<string, number>>({});
   useEffect(() => {
     fetch("/countries_with_continent.geo.json")
       .then((res) => res.json())
@@ -702,6 +1077,42 @@ export default function GlobeComponent() {
         setCountries(filteredFeatures);
         setGeojson({ ...geojson, features: filteredFeatures });
         setLabels([]);
+        // Fetch GDP para todos los países (solo una vez, usando nombre)
+        filteredFeatures.forEach((f: any) => {
+          const countryName = f.properties?.name || f.properties?.NAME || f.id;
+          if (!countryName || typeof countryName !== 'string') return;
+          if (gdpCache[countryName]) return;
+          const localGDP = getGDPFromStorage(countryName);
+          if (localGDP) {
+            gdpCache[countryName] = localGDP;
+            setGDPByCountry(prev => ({ ...prev, [countryName]: localGDP }));
+            return;
+          }
+          // Buscar el código ISO2 por nombre
+          fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
+            .then(res => res.json())
+            .then((data) => {
+              if (!Array.isArray(data) || !Array.isArray(data[1])) return;
+              const found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+              if (!found || !found.id) return;
+              const iso2 = found.id;
+              // Ahora sí, fetch GDP
+              return fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/NY.GDP.MKTP.CD?format=json&per_page=1`)
+                .then(res2 => res2.json())
+                .then((gdpData) => {
+                  let gdp = null;
+                  if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
+                    gdp = gdpData[1][0].value;
+                  }
+                  if (typeof gdp === 'number') {
+                    gdpCache[countryName] = gdp;
+                    setGDPInStorage(countryName, gdp);
+                    setGDPByCountry(prev => ({ ...prev, [countryName]: gdp }));
+                  }
+                });
+            })
+            .catch(() => {});
+        });
       });
     // Fetch población de countriesnow.space
     fetch("https://countriesnow.space/api/v0.1/countries/population")
@@ -741,6 +1152,7 @@ export default function GlobeComponent() {
             ContinentLabelsComponent={
               (props: any) => <ContinentLabels2D {...props} onContinentClick={setSelectedContinent} />
             }
+            gdpByCountry={gdpByCountry}
           />
           {selectedContinent && selectedContinent !== "ANTARCTICA" && (
             <ContinentStatsModal
@@ -756,6 +1168,7 @@ export default function GlobeComponent() {
           popByCountry={popByCountry}
           normalizeCountryName={normalizeCountryName}
           onContinentClick={setSelectedContinent}
+          gdpByCountry={gdpByCountry}
         />
       )}
     </div>

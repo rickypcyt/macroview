@@ -25298,7 +25298,7 @@
       "id": "CS-KM",
       "properties": {
         "name": "Kosovo",
-      "continent": "XK"  
+      "continent": "Europe"  
      },
       "geometry": {
         "type": "Polygon",
