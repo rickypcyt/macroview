@@ -2,18 +2,14 @@
 
 import "leaflet/dist/leaflet.css";
 
-// import countriesData from "world-countries"; // No usar, solo GeoJSON
-import { GeoJSON, MapContainer as LeafletMap, TileLayer } from "react-leaflet";
-import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import { Tooltip, useMap } from "react-leaflet";
-import { useEffect, useRef, useState } from "react";
+import { GeoJSON, MapContainer as LeafletMap, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import type { LatLngBoundsExpression, LatLngExpression, LeafletEvent } from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import GlobeImport from "react-globe.gl";
-import dynamic from "next/dynamic";
-import { feature } from "topojson-client";
-import { useMapEvents } from "react-leaflet";
 
-type GlobeMethods = typeof GlobeImport;
+type WorldBankCountry = { id: string; name: string };
+type GlobeLabel = { lat: number; lng: number; text: string; isCountry?: boolean; isContinent?: boolean; bgColor?: string; color?: string; size?: number; };
 
 // --- Modo 2D: Mostrar nombre del país en hover ---
 
@@ -64,19 +60,6 @@ function getInflationFromStorage(countryName: string): number | null {
 function setInflationInStorage(countryName: string, value: number) {
   try {
     localStorage.setItem(`inflationCache:${countryName}`, value.toString());
-  } catch {}
-}
-// Helper para cachear tarifa en localStorage
-function getTariffFromStorage(countryName: string): number | null {
-  try {
-    const val = localStorage.getItem(`tariffCache:${countryName}`);
-    if (val) return parseFloat(val);
-  } catch {}
-  return null;
-}
-function setTariffInStorage(countryName: string, value: number) {
-  try {
-    localStorage.setItem(`tariffCache:${countryName}`, value.toString());
   } catch {}
 }
 // Helper para cachear tarifas globales en localStorage
@@ -144,7 +127,7 @@ const WORLD_BANK_NAME_ALIASES: Record<string, string[]> = {
   // Puedes agregar más casos especiales aquí
 };
 
-function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName, gdpByCountry }: { country: any, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, gdpByCountry: Record<string, number> }) {
+function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName, gdpByCountry }: { country: GeoJSON.Feature, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, gdpByCountry: Record<string, number> }) {
   const popupRef = useRef<HTMLDivElement>(null);
   const [apiPopulation, setApiPopulation] = useState<number | null>(null);
   const [populationYear, setPopulationYear] = useState<number | null>(null);
@@ -178,30 +161,35 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
     };
   }, [onClose]);
 
-  if (!country) return null;
-  // Buscar población por nombre normalizado
   const countryName = country.properties?.name || country.properties?.NAME || country.id || "";
   const normalized = normalizeCountryName(countryName);
-  let population: string | number = "Desconocida";
-  let populationYearStatic: number | null = null;
-  if (normalized && popByCountry[normalized]) {
-    const popVal = popByCountry[normalized];
-    if (typeof popVal === 'object' && popVal !== null && 'value' in popVal) {
-      const popObj = popVal as { value: number, year?: number };
-      population = popObj.value;
-      populationYearStatic = popObj.year || null;
-    } else {
-      population = popVal;
-      populationYearStatic = null;
+  const population = useMemo(() => {
+    if (normalized && popByCountry[normalized]) {
+      const popVal = popByCountry[normalized];
+      if (typeof popVal === 'object' && popVal !== null && 'value' in popVal) {
+        const popObj = popVal as { value: number, year?: number };
+        return popObj.value;
+      } else {
+        return popVal;
+      }
+    } else if (country.properties?.POP_EST) {
+      return country.properties.POP_EST;
     }
-  } else if (country.properties?.POP_EST) {
-    population = country.properties.POP_EST;
-    if (country.properties?.POP_YEAR) {
-      populationYearStatic = country.properties.POP_YEAR;
-    }
-  }
+    return "Desconocida";
+  }, [country, popByCountry, normalized]);
 
-  // Si no hay población local, intenta obtenerla de la API externa
+  const populationYearStatic = useMemo(() => {
+    if (normalized && popByCountry[normalized]) {
+      const popVal = popByCountry[normalized];
+      if (typeof popVal === 'object' && popVal !== null && 'year' in popVal && typeof (popVal as { year?: number }).year === 'number') {
+        return (popVal as { year: number }).year;
+      }
+    } else if (country.properties?.POP_YEAR) {
+      return country.properties.POP_YEAR;
+    }
+    return null;
+  }, [country, popByCountry, normalized]);
+
   useEffect(() => {
     if (population === "Desconocida" && countryName) {
       // Buscar ISO2 code
@@ -287,8 +275,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
             setPopulationYear(null);
           }
         })
-        .catch((err) => {
-          console.error('API fetch error:', err);
+        .catch(() => {
           setPopulationYear(null);
         })
         .finally(() => setLoadingApi(false));
@@ -298,7 +285,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       setLoadingApi(false);
       setPopulationYear(null);
     }
-  }, [countryName, population]);
+  }, [countryName, population, country, normalizeCountryName, popByCountry]);
 
   // GDP logic
   useEffect(() => {
@@ -341,31 +328,31 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       .then((data) => {
         if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo buscar país");
         // Buscar por nombre exacto y luego por alias (case-insensitive)
-        let found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+        let found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
         if (!found) {
           // Buscar por alias si existe (case-insensitive)
           const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
           for (const alias of aliases) {
-            found = data[1].find((c: any) => c.name && c.name.toLowerCase() === alias.toLowerCase());
+            found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === alias.toLowerCase());
             if (found) break;
           }
         }
         if (!found) {
           // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
           const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
-          found = data[1].find((c: any) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+          found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
         }
         // Buscar por código ISO2 (2 letras)
         if (!found && iso2 && typeof iso2 === 'string') {
-          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
+          found = data[1].find((c: WorldBankCountry) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
         }
         // Buscar por código ISO3 (3 letras)
         if (!found && iso3 && typeof iso3 === 'string') {
-          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
+          found = data[1].find((c: WorldBankCountry) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
         }
         // Fallback manual para USA
         if (!found && (countryName.toLowerCase().includes('united states') || (iso2 && iso2.toUpperCase() === 'US'))) {
-          found = data[1].find((c: any) => c.id === 'USA');
+          found = data[1].find((c: WorldBankCountry) => c.id === 'USA');
         }
         if (!found || !found.id) throw new Error("No se encontró el país en World Bank");
         const countryId = found.id;
@@ -390,7 +377,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
             }
           });
       })
-      .catch((err) => {
+      .catch(() => {
         setGDPError("No disponible en API externa");
         setGdpYear(null);
       })
@@ -430,26 +417,26 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       .then(res => res.json())
       .then((data) => {
         if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo buscar país");
-        let found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+        let found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
         if (!found) {
           const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
           for (const alias of aliases) {
-            found = data[1].find((c: any) => c.name && c.name.toLowerCase() === alias.toLowerCase());
+            found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === alias.toLowerCase());
             if (found) break;
           }
         }
         if (!found) {
           const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
-          found = data[1].find((c: any) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+          found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
         }
         if (!found && iso2 && typeof iso2 === 'string') {
-          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
+          found = data[1].find((c: WorldBankCountry) => c.id && c.id.toUpperCase() === iso2.toUpperCase());
         }
         if (!found && iso3 && typeof iso3 === 'string') {
-          found = data[1].find((c: any) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
+          found = data[1].find((c: WorldBankCountry) => c.id && c.id.toUpperCase() === iso3.toUpperCase());
         }
         if (!found && (countryName.toLowerCase().includes('united states') || (iso2 && iso2.toUpperCase() === 'US'))) {
-          found = data[1].find((c: any) => c.id === 'USA');
+          found = data[1].find((c: WorldBankCountry) => c.id === 'USA');
         }
         if (!found || !found.id) throw new Error("No se encontró el país en World Bank");
         const countryId = found.id;
@@ -474,7 +461,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
             }
           });
       })
-      .catch((err) => {
+      .catch(() => {
         setInflationError("No disponible en API externa");
         setInflationYear(null);
       })
@@ -519,10 +506,16 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo obtener tarifas globales");
         const map: Record<string, number> = {};
         let year: number | null = null;
-        data[1].forEach((item: any) => {
-          if (item.countryiso3code && typeof item.value === 'number') {
+        data[1].forEach((item: Record<string, unknown>) => {
+          if (
+            typeof item.countryiso3code === 'string' &&
+            typeof item.value === 'number'
+          ) {
             map[item.countryiso3code] = item.value;
-            if (item.countryiso3code === iso3 && item.date) {
+            if (
+              item.countryiso3code === iso3 &&
+              typeof item.date === 'string'
+            ) {
               year = parseInt(item.date);
             }
           }
@@ -602,9 +595,6 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
   );
 }
 
-const Globe = dynamic<any>(() => import("react-globe.gl"), { ssr: false, loading: () => <div className="text-center">Cargando globo...</div> });
-
-
 // --- Helpers y lógica compartida para 2D y 3D ---
 
 export const CONTINENTS_EN = [
@@ -665,20 +655,24 @@ export function normalizeCountryName(name: string): string {
   return n;
 }
 
-function getCentroid(coords: any[]): [number, number] {
+function hasCoordinates(geometry: GeoJSON.Geometry): geometry is GeoJSON.Polygon | GeoJSON.MultiPolygon {
+  return geometry.type === 'Polygon' || geometry.type === 'MultiPolygon';
+}
+
+function getCentroid(coords: number[][][] | number[][][][]): [number, number] {
   // Solo soporta MultiPolygon y Polygon
-  let all: any[] = [];
+  const all: number[][] = [];
   if (Array.isArray(coords[0][0][0])) {
     // MultiPolygon
-    coords.forEach((poly: any) => {
-      poly[0].forEach((c: any) => all.push(c));
+    (coords as number[][][][]).forEach((poly) => {
+      (poly[0] as number[][]).forEach((c) => all.push(c));
     });
   } else {
     // Polygon
-    coords[0].forEach((c: any) => all.push(c));
+    (coords as number[][][])[0].forEach((c) => all.push(c));
   }
-  const lats = all.map((c: any) => c[1]);
-  const lngs = all.map((c: any) => c[0]);
+  const lats = all.map((c) => c[1]);
+  const lngs = all.map((c) => c[0]);
   return [lats.reduce((a, b) => a + b, 0) / lats.length, lngs.reduce((a, b) => a + b, 0) / lngs.length];
 }
 
@@ -769,7 +763,7 @@ function ContinentLabels2D({ continents, onContinentClick }: { continents: { nam
   );
 }
 
-function CountryLabels2D({ geojson, zoom }: { geojson: any, zoom: number }) {
+function CountryLabels2D({ geojson, zoom }: { geojson: GeoJSON.FeatureCollection, zoom: number }) {
   const map = useMap();
   const [, setMapUpdate] = useState(0);
 
@@ -788,12 +782,13 @@ function CountryLabels2D({ geojson, zoom }: { geojson: any, zoom: number }) {
   if (zoom <= 3.5) return null;
   return (
     <>
-      {geojson.features.map((feature: any) => {
-        const [lat, lng] = getCentroid(feature.geometry.coordinates);
+      {geojson.features.map((feature: GeoJSON.Feature) => {
+        if (!feature.geometry || !hasCoordinates(feature.geometry)) return null;
+        const [lat, lng] = getCentroid((feature.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
         const point = map.latLngToContainerPoint([lat, lng]);
         return (
           <div
-            key={feature.properties.name}
+            key={feature.properties?.name || feature.id}
             className="absolute pointer-events-none select-none text-xs font-bold text-white bg-black/60 rounded px-2 py-1 shadow"
             style={{
               left: point.x,
@@ -803,7 +798,7 @@ function CountryLabels2D({ geojson, zoom }: { geojson: any, zoom: number }) {
               whiteSpace: "nowrap"
             }}
           >
-            {feature.properties.name}
+            {feature.properties?.name}
           </div>
         );
       })}
@@ -813,19 +808,19 @@ function CountryLabels2D({ geojson, zoom }: { geojson: any, zoom: number }) {
 
 function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
   useMapEvents({
-    zoomend: (e) => setZoom(e.target.getZoom()),
-    zoomstart: (e) => setZoom(e.target.getZoom()),
-    moveend: (e) => setZoom(e.target.getZoom()),
+    zoomend: (e: LeafletEvent) => setZoom(e.target.getZoom()),
+    zoomstart: (e: LeafletEvent) => setZoom(e.target.getZoom()),
+    moveend: (e: LeafletEvent) => setZoom(e.target.getZoom()),
   });
   return null;
 }
 
 
-function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLabelsComponent, gdpByCountry }: { geojson: any, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, ContinentLabelsComponent?: any, gdpByCountry: Record<string, number> }) {
+function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLabelsComponent, gdpByCountry }: { geojson: GeoJSON.FeatureCollection, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, ContinentLabelsComponent?: React.ComponentType<{ continents: { name: string, lat: number, lng: number }[] }>, gdpByCountry: Record<string, number> }) {
   const [zoom, setZoom] = useState(2);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<any>(null);
+  const [selectedCountry, setSelectedCountry] = useState<GeoJSON.Feature | null>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
 
   const continentColors: Record<string, string> = {
@@ -842,24 +837,24 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
   const highlightedCountry = selectedCountry?.properties?.name || hoveredCountry;
 
   // Custom onEachFeature to handle hover and click
-  function onEachCountry(feature: any, layer: any) {
+  function onEachCountry(feature: GeoJSON.Feature, layer: L.Layer) {
     layer.on({
-      mouseover: (e: any) => {
-        setHoveredCountry(feature.properties.name);
+      mouseover: (e: L.LeafletMouseEvent) => {
+        setHoveredCountry(feature.properties?.name || feature.id);
         if (e.originalEvent) {
           setHoverPos({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
         }
-        layer.setStyle({ weight: 2, color: "#fff" });
+        (layer as L.Path).setStyle({ weight: 2, color: "#fff" });
       },
       mouseout: () => {
         setHoveredCountry(null);
         setHoverPos(null);
         // Solo quitar el highlight si no está seleccionado
-        if (!selectedCountry || selectedCountry.properties.name !== feature.properties.name) {
-          layer.setStyle({ weight: 1, color: "#222" });
+        if (!selectedCountry || selectedCountry.properties?.name !== feature.properties?.name) {
+          (layer as L.Path).setStyle({ weight: 1, color: "#222" });
         }
       },
-      click: (e: any) => {
+      click: (e: L.LeafletMouseEvent) => {
         setSelectedCountry(feature);
         if (e.originalEvent) {
           setPopupPos({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
@@ -869,7 +864,8 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
   }
 
   // Custom style para resaltar el país hovered o seleccionado
-  function countryStyle(feature: any) {
+  function countryStyle(feature?: GeoJSON.Feature) {
+    if (!feature || !feature.properties) return {};
     const isHighlighted = highlightedCountry === feature.properties.name;
     const continent = feature.properties.continent;
     const fillColor = continentColors[continent] || "#e5e7eb";
@@ -883,7 +879,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
   }
 
   // Mostrar labels centrados solo si el zoom es suficiente
-  const showLabels = zoom > 3.5;
+  // const showLabels = zoom > 3.5; // Unused variable - removed
 
   return (
     <div className="fixed inset-0 w-full h-full flex items-center justify-center bg-black">
@@ -900,12 +896,10 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
         <MapZoomListener setZoom={setZoom} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          // @ts-ignore
           attribution="&copy; OpenStreetMap contributors"
         />
         <GeoJSON
           data={geojson}
-          // @ts-ignore
           style={countryStyle}
           onEachFeature={onEachCountry}
         />
@@ -947,12 +941,12 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
 
 // --- Globe 3D: selección de país y popup ---
 
-function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick, gdpByCountry }: { countries: any[], popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, onContinentClick: (name: string) => void, gdpByCountry: Record<string, number> }) {
-  const [selectedCountry, setSelectedCountry] = useState<any>(null);
+function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick, gdpByCountry }: { countries: GeoJSON.Feature[], popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, onContinentClick: (name: string) => void, gdpByCountry: Record<string, number> }) {
+  const [selectedCountry, setSelectedCountry] = useState<GeoJSON.Feature | null>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
-  const [labelPositions, setLabelPositions] = useState<{ name: string, x: number, y: number }[]>([]);
   // Estado para el nivel de zoom/cámara
   const [cameraDistance, setCameraDistance] = useState(2);
 
@@ -969,15 +963,16 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
   // Labels de países (centroide)
   const countryLabelsData = showCountryLabels
     ? countries.map((c) => {
+        if (!c.geometry || !hasCoordinates(c.geometry)) return null;
         // Calcular centroide
-        const coords = getCentroid(c.geometry.coordinates);
+        const coords = getCentroid((c.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
         return {
           lat: coords[0],
           lng: coords[1],
           text: c.properties?.name,
           isCountry: true,
         };
-      })
+      }).filter(Boolean)
     : [];
 
   // Labels de continentes
@@ -992,13 +987,13 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
   const allLabelsData = [...continentLabelsData, ...countryLabelsData];
 
   // Handler para click en país (solo si no hay labels de países)
-  function handlePolygonClick(country: any, event: any) {
+  function handlePolygonClick(country: GeoJSON.Feature, event?: MouseEvent) {
     if (showCountryLabels) return;
     setSelectedCountry(country);
-    if (event && event.clientX && event.clientY) {
+    if (event && 'clientX' in event && 'clientY' in event) {
       setPopupPos({ x: event.clientX, y: event.clientY });
-    } else if (globeRef.current && country) {
-      const centroid = getCentroid(country.geometry.coordinates);
+    } else if (globeRef.current && country && country.geometry && hasCoordinates(country.geometry)) {
+      const centroid = getCentroid((country.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
       const coords = globeRef.current.getScreenCoords(centroid[1], centroid[0]);
       setPopupPos({ x: coords.x, y: coords.y });
     }
@@ -1008,29 +1003,29 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
   // Puedes desactivar el highlight si showCountryLabels
 
   // Colores por continente
-  function getPolygonColor(country: any) {
+  function getPolygonColor(country: GeoJSON.Feature) {
     const continent = country.properties?.continent;
     return CONTINENT_COLORS[continent] || "#e5e7eb";
   }
 
   // Labels de continentes (usando Globe labelsData)
-  const labelsData = CONTINENTS_EN.map(c => ({
-    lat: c.lat,
-    lng: c.lng,
-    text: c.name,
-    isContinent: true,
-    bgColor: "#2229",
-    color: "#fff",
-    size: 2.2,
-  }));
+  // const labelsData = CONTINENTS_EN.map(c => ({
+  //   lat: c.lat,
+  //   lng: c.lng,
+  //   text: c.name,
+  //   isContinent: true,
+  //   bgColor: "#2229",
+  //   color: "#fff",
+  //   size: 2.2,
+  // })); // Unused variable - removed
 
   // Handler para click en label de continente
-  function handleLabelClick(label: any, event: any) {
-    if (label.isContinent) {
-      setSelectedContinent(label.text);
-      if (onContinentClick) onContinentClick(label.text);
-    }
-  }
+  // function handleLabelClick(label: GlobeLabel, event: L.LeafletMouseEvent) {
+  //   if (label.isContinent) {
+  //     setSelectedContinent(label.text);
+  //     if (onContinentClick) onContinentClick(label.text);
+  //   }
+  // } // Unused function - removed
 
   return (
     <div className="fixed inset-0 w-full h-full flex items-center justify-center bg-black">
@@ -1039,10 +1034,10 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
         globeImageUrl="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2048' height='1024'%3E%3Crect width='100%25' height='100%25' fill='%232563eb'/%3E%3C/svg%3E"
         backgroundColor="#000"
         polygonsData={countries}
-        polygonCapColor={getPolygonColor}
+        polygonCapColor={(country) => getPolygonColor(country as GeoJSON.Feature)}
         polygonSideColor={() => "#16a34a"}
         polygonStrokeColor={() => "#166534"}
-        polygonLabel={({ properties }: any) => properties?.name}
+        polygonLabel={(country) => (country as GeoJSON.Feature).properties?.name}
         polygonsTransitionDuration={0}
         width={typeof window !== 'undefined' ? window.innerWidth : 1920}
         height={typeof window !== 'undefined' ? window.innerHeight : 1080}
@@ -1051,20 +1046,21 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
         atmosphereAltitude={0.01}
         showAtmosphere={false}
         animateIn={false}
-        onPolygonClick={handlePolygonClick}
+        onPolygonClick={(country, event) => handlePolygonClick(country as GeoJSON.Feature, event as MouseEvent)}
         onZoom={handleCameraChange}
         onGlobeReady={handleCameraChange}
-        labelsData={allLabelsData}
-        labelLat={(d: any) => d.lat}
-        labelLng={(d: any) => d.lng}
-        labelText={(d: any) => d.text}
-        labelColor={(d: any) => d.isCountry ? "white" : "white"}
-        labelSize={(d: any) => d.isCountry ? 1.1 : 2.6}
-        labelLabel={(label: any) => `<div style='font-weight:900;font-size:${label.isCountry ? "1.1rem" : "2.2rem"};color:white;text-shadow:0 2px 8px #000,0 0 2px #000;'>${label.text.toUpperCase()}</div>`}
-        onLabelClick={(label: any) => {
-          if (label && label.text && label.isContinent) {
-            setSelectedContinent(label.text);
-            if (onContinentClick) onContinentClick(label.text);
+        labelsData={allLabelsData as GlobeLabel[]}
+        labelLat={(d: object) => (d as GlobeLabel).lat}
+        labelLng={(d: object) => (d as GlobeLabel).lng}
+        labelText={(d: object) => (d as GlobeLabel).text}
+        labelColor={(d: object) => (d as GlobeLabel).isCountry ? "white" : "white"}
+        labelSize={(d: object) => (d as GlobeLabel).isCountry ? 1.1 : 2.6}
+        labelLabel={(label: object) => `<div style='font-weight:900;font-size:${(label as GlobeLabel).isCountry ? "1.1rem" : "2.2rem"};color:white;text-shadow:0 2px 8px #000,0 0 2px #000;'>${(label as GlobeLabel).text.toUpperCase()}</div>`}
+        onLabelClick={(label: object) => {
+          const globeLabel = label as GlobeLabel;
+          if (globeLabel && globeLabel.text && globeLabel.isContinent) {
+            setSelectedContinent(globeLabel.text);
+            if (onContinentClick) onContinentClick(globeLabel.text);
           }
         }}
         labelDotRadius={0}
@@ -1107,10 +1103,9 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
 
 export default function GlobeComponent() {
   const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
-  const [countries, setCountries] = useState<any[]>([]);
-  const [labels, setLabels] = useState<any[]>([]);
-  const [zoom, setZoom] = useState(1.5);
-  const [geojson, setGeojson] = useState<any>(null);
+  const [countries, setCountries] = useState<GeoJSON.Feature[]>([]);
+  // const [labels, setLabels] = useState<GeoJSON.Feature[]>([]); // Unused variable - removed
+  const [geojson, setGeojson] = useState<GeoJSON.FeatureCollection | null>(null);
   const [mode2D, setMode2D] = useState(false);
   const [popByCountry, setPopByCountry] = useState<Record<string, number>>({});
   const [gdpByCountry, setGDPByCountry] = useState<Record<string, number>>({});
@@ -1119,16 +1114,16 @@ export default function GlobeComponent() {
       .then((res) => res.json())
       .then((geojson) => {
         // Filtrar Bermuda por nombre o código
-        const filteredFeatures = geojson.features.filter((f: any) => {
+        const filteredFeatures = geojson.features.filter((f: GeoJSON.Feature) => {
           const name = f.properties?.name || f.properties?.NAME || f.id || "";
           const iso2 = f.properties?.ISO_A2 || f.properties?.iso_a2 || f.properties?.iso2 || f.id || "";
           return name.toLowerCase() !== "bermuda" && iso2.toUpperCase() !== "BM";
         });
         setCountries(filteredFeatures);
         setGeojson({ ...geojson, features: filteredFeatures });
-        setLabels([]);
+        // setLabels([]); // Unused setter - removed
         // Fetch GDP para todos los países (solo una vez, usando nombre)
-        filteredFeatures.forEach((f: any) => {
+        filteredFeatures.forEach((f: GeoJSON.Feature) => {
           const countryName = f.properties?.name || f.properties?.NAME || f.id;
           if (!countryName || typeof countryName !== 'string') return;
           if (gdpCache[countryName]) return;
@@ -1143,7 +1138,7 @@ export default function GlobeComponent() {
             .then(res => res.json())
             .then((data) => {
               if (!Array.isArray(data) || !Array.isArray(data[1])) return;
-              const found = data[1].find((c: any) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+              const found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
               if (!found || !found.id) return;
               const iso2 = found.id;
               // Ahora sí, fetch GDP
@@ -1151,10 +1146,10 @@ export default function GlobeComponent() {
                 .then(res2 => res2.json())
                 .then((gdpData) => {
                   let gdp = null;
-                  let year = null;
+                  // let year = null; // Unused variable - removed
                   if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
                     gdp = gdpData[1][0].value;
-                    year = gdpData[1][0].date ? parseInt(gdpData[1][0].date) : null;
+                    // year = gdpData[1][0].date ? parseInt(gdpData[1][0].date) : null; // Unused variable - removed
                   }
                   if (typeof gdp === 'number') {
                     gdpCache[countryName] = gdp;
@@ -1172,11 +1167,11 @@ export default function GlobeComponent() {
       .then((data) => {
         const popMap: Record<string, number> = {};
         if (Array.isArray(data.data)) {
-          data.data.forEach((item: any) => {
+          data.data.forEach((item: Record<string, unknown>) => {
             if (item.country && Array.isArray(item.populationCounts) && item.populationCounts.length > 0) {
               // Tomar el valor más reciente
-              const mostRecent = item.populationCounts.reduce((a: any, b: any) => (parseInt(a.year) > parseInt(b.year) ? a : b));
-              popMap[normalizeCountryName(item.country)] = parseInt(mostRecent.value);
+              const mostRecent = item.populationCounts.reduce((a: Record<string, unknown>, b: Record<string, unknown>) => (parseInt(a.year as string) > parseInt(b.year as string) ? a : b));
+              popMap[normalizeCountryName(item.country as string)] = parseInt(mostRecent.value as string);
             }
           });
         }
@@ -1202,7 +1197,7 @@ export default function GlobeComponent() {
             popByCountry={popByCountry}
             normalizeCountryName={normalizeCountryName}
             ContinentLabelsComponent={
-              (props: any) => <ContinentLabels2D {...props} onContinentClick={setSelectedContinent} />
+              (props: { continents: { name: string, lat: number, lng: number }[] }) => <ContinentLabels2D {...props} onContinentClick={setSelectedContinent} />
             }
             gdpByCountry={gdpByCountry}
           />
