@@ -147,18 +147,22 @@ const WORLD_BANK_NAME_ALIASES: Record<string, string[]> = {
 function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName, gdpByCountry }: { country: any, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, gdpByCountry: Record<string, number> }) {
   const popupRef = useRef<HTMLDivElement>(null);
   const [apiPopulation, setApiPopulation] = useState<number | null>(null);
+  const [populationYear, setPopulationYear] = useState<number | null>(null);
   const [loadingApi, setLoadingApi] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   // GDP states
   const [apiGDP, setApiGDP] = useState<number | null>(null);
+  const [gdpYear, setGdpYear] = useState<number | null>(null);
   const [loadingGDP, setLoadingGDP] = useState(false);
   const [gdpError, setGDPError] = useState<string | null>(null);
   // Inflación states
   const [apiInflation, setApiInflation] = useState<number | null>(null);
+  const [inflationYear, setInflationYear] = useState<number | null>(null);
   const [loadingInflation, setLoadingInflation] = useState(false);
   const [inflationError, setInflationError] = useState<string | null>(null);
   // Tarifa states
   const [apiTariff, setApiTariff] = useState<number | null>(null);
+  const [tariffYear, setTariffYear] = useState<number | null>(null);
   const [loadingTariff, setLoadingTariff] = useState(false);
   const [tariffError, setTariffError] = useState<string | null>(null);
 
@@ -179,10 +183,22 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
   const countryName = country.properties?.name || country.properties?.NAME || country.id || "";
   const normalized = normalizeCountryName(countryName);
   let population: string | number = "Desconocida";
+  let populationYearStatic: number | null = null;
   if (normalized && popByCountry[normalized]) {
-    population = popByCountry[normalized];
+    const popVal = popByCountry[normalized];
+    if (typeof popVal === 'object' && popVal !== null && 'value' in popVal) {
+      const popObj = popVal as { value: number, year?: number };
+      population = popObj.value;
+      populationYearStatic = popObj.year || null;
+    } else {
+      population = popVal;
+      populationYearStatic = null;
+    }
   } else if (country.properties?.POP_EST) {
     population = country.properties.POP_EST;
+    if (country.properties?.POP_YEAR) {
+      populationYearStatic = country.properties.POP_YEAR;
+    }
   }
 
   // Si no hay población local, intenta obtenerla de la API externa
@@ -251,29 +267,36 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         .then((data) => {
           console.log('API response data:', data);
           let population = null;
+          let year = null;
           if (data && typeof data.population === 'number') {
             population = data.population;
+            year = data.year || null;
           } else if (data && Array.isArray(data.historical_population) && data.historical_population.length > 0) {
             // Tomar el valor más reciente
-            population = data.historical_population[data.historical_population.length - 1].population;
+            const mostRecent = data.historical_population[data.historical_population.length - 1];
+            population = mostRecent.population;
+            year = mostRecent.year || null;
           }
           if (typeof population === 'number') {
             setApiPopulation(population);
+            setPopulationYear(year);
             populationCache[queryKey] = population;
             setPopulationInStorage(queryKey, population);
           } else {
             setApiError("No disponible en API externa");
+            setPopulationYear(null);
           }
         })
         .catch((err) => {
           console.error('API fetch error:', err);
-          setApiError("No disponible en API externa")
+          setPopulationYear(null);
         })
         .finally(() => setLoadingApi(false));
     } else {
       setApiPopulation(null);
       setApiError(null);
       setLoadingApi(false);
+      setPopulationYear(null);
     }
   }, [countryName, population]);
 
@@ -351,20 +374,25 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
           .then(res2 => res2.json())
           .then((gdpData) => {
             let gdp = null;
+            let year = null;
             if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
               gdp = gdpData[1][0].value;
+              year = gdpData[1][0].date ? parseInt(gdpData[1][0].date) : null;
             }
             if (typeof gdp === 'number') {
               setApiGDP(gdp);
+              setGdpYear(year);
               gdpCache[countryName] = gdp;
               setGDPInStorage(countryName, gdp);
             } else {
               setGDPError("No disponible en API externa");
+              setGdpYear(null);
             }
           });
       })
       .catch((err) => {
         setGDPError("No disponible en API externa");
+        setGdpYear(null);
       })
       .finally(() => setLoadingGDP(false));
   }, [country, gdpByCountry]);
@@ -374,6 +402,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
     setLoadingInflation(true);
     setInflationError(null);
     setApiInflation(null);
+    setInflationYear(null);
     const countryName = country.properties?.name || country.properties?.NAME || country.id;
     const iso2 = country.properties?.ISO_A2 || country.properties?.iso_a2 || country.properties?.iso2 || country.id;
     const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
@@ -429,20 +458,25 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
           .then(res2 => res2.json())
           .then((inflationData) => {
             let inflation = null;
+            let year = null;
             if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
               inflation = inflationData[1][0].value;
+              year = inflationData[1][0].date ? parseInt(inflationData[1][0].date) : null;
             }
             if (typeof inflation === 'number') {
               setApiInflation(inflation);
+              setInflationYear(year);
               inflationCache[countryName] = inflation;
               setInflationInStorage(countryName, inflation);
             } else {
               setInflationError("No disponible en API externa");
+              setInflationYear(null);
             }
           });
       })
       .catch((err) => {
         setInflationError("No disponible en API externa");
+        setInflationYear(null);
       })
       .finally(() => setLoadingInflation(false));
   }, [country]);
@@ -452,10 +486,12 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
     setLoadingTariff(true);
     setTariffError(null);
     setApiTariff(null);
+    setTariffYear(null);
     const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
     if (!iso3 || typeof iso3 !== 'string') {
       setTariffError("No disponible");
       setLoadingTariff(false);
+      setTariffYear(null);
       return;
     }
     // Si ya está en cache en memoria
@@ -463,6 +499,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       setApiTariff(tariffByIso3[iso3]);
       setTariffError(null);
       setLoadingTariff(false);
+      setTariffYear(null); // No guardamos año en cache local
       return;
     }
     // Si ya está en localStorage
@@ -472,6 +509,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       setApiTariff(tariffMap[iso3]);
       setTariffError(null);
       setLoadingTariff(false);
+      setTariffYear(null); // No guardamos año en cache local
       return;
     }
     // Fetch global de tarifas
@@ -480,9 +518,13 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       .then((data) => {
         if (!Array.isArray(data) || !Array.isArray(data[1])) throw new Error("No se pudo obtener tarifas globales");
         const map: Record<string, number> = {};
+        let year: number | null = null;
         data[1].forEach((item: any) => {
           if (item.countryiso3code && typeof item.value === 'number') {
             map[item.countryiso3code] = item.value;
+            if (item.countryiso3code === iso3 && item.date) {
+              year = parseInt(item.date);
+            }
           }
         });
         Object.assign(tariffByIso3, map);
@@ -490,12 +532,15 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         if (map[iso3]) {
           setApiTariff(map[iso3]);
           setTariffError(null);
+          setTariffYear(year);
         } else {
           setTariffError("No disponible en API externa");
+          setTariffYear(null);
         }
       })
       .catch(() => {
         setTariffError("No disponible en API externa");
+        setTariffYear(null);
       })
       .finally(() => setLoadingTariff(false));
   }, [country]);
@@ -511,21 +556,26 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         <button onClick={onClose} className="ml-2 text-gray-500 hover:text-red-500 font-bold text-lg leading-none">×</button>
       </div>
       <div className="mb-1">
-        <span className="text-gray-700">Population:</span> {typeof population === 'number' ? population.toLocaleString() :
+        <span className="text-gray-700">Population:</span> {typeof population === 'number' ?
+          <>
+            {population.toLocaleString()} {populationYearStatic ? <span className="text-gray-500">({populationYearStatic})</span> : <span className="text-gray-500">(año desconocido)</span>}
+          </> :
           loadingApi ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
-          apiPopulation ? apiPopulation.toLocaleString() :
+          apiPopulation ? <>
+            {apiPopulation.toLocaleString()} {populationYear ? <span className="text-gray-500">({populationYear})</span> : <span className="text-gray-500">(año desconocido)</span>}
+          </> :
           apiError ? <span className="text-red-500 ml-2">{apiError}</span> : population}
       </div>
       <div className="mb-1">
         <span className="text-gray-700">GDP (USD):</span> {loadingGDP ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
           (typeof apiGDP === 'number' ?
             <>
-              ${apiGDP.toLocaleString()} <span className="text-gray-500">({formatLargeNumber(apiGDP)})</span>
+              ${apiGDP.toLocaleString()} <span className="text-gray-500">({formatLargeNumber(apiGDP)})</span> {gdpYear ? <span className="text-gray-500">({gdpYear})</span> : <span className="text-gray-500">(año desconocido)</span>}
             </> :
             gdpError ? <span className="text-red-500 ml-2">{gdpError}</span> :
             gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id] ?
               <>
-                ${gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id].toLocaleString()} <span className="text-gray-500">({formatLargeNumber(gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id])})</span>
+                ${gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id].toLocaleString()} <span className="text-gray-500">({formatLargeNumber(gdpByCountry[country.properties?.ISO_A2?.toUpperCase() || country.id])})</span> <span className="text-gray-500">(año desconocido)</span>
               </> :
             "Desconocido")}
       </div>
@@ -533,7 +583,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         <span className="text-gray-700">Inflation:</span> {loadingInflation ? <span className="italic text-gray-500 ml-2">Loading...</span> :
           (typeof apiInflation === 'number' ?
             <>
-              {apiInflation.toFixed(2)}% <span className="text-gray-500">({formatInflationWord(apiInflation)})</span>
+              {apiInflation.toFixed(2)}% <span className="text-gray-500">({formatInflationWord(apiInflation)})</span> {inflationYear && <span className="text-gray-500">({inflationYear})</span>}
             </> :
             inflationError ? <span className="text-red-500 ml-2">{inflationError}</span> :
             "Unknown")}
@@ -542,7 +592,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         <span className="text-gray-700">Tariff:</span> {loadingTariff ? <span className="italic text-gray-500 ml-2">Loading...</span> :
           (typeof apiTariff === 'number' ?
             <>
-              {apiTariff.toFixed(2)}% <span className="text-gray-500">({formatTariffWord(apiTariff)})</span>
+              {apiTariff.toFixed(2)}% <span className="text-gray-500">({formatTariffWord(apiTariff)})</span> {tariffYear && <span className="text-gray-500">({tariffYear})</span>}
             </> :
             tariffError ? <span className="text-red-500 ml-2">{tariffError}</span> :
             "Unknown")}
@@ -1101,8 +1151,10 @@ export default function GlobeComponent() {
                 .then(res2 => res2.json())
                 .then((gdpData) => {
                   let gdp = null;
+                  let year = null;
                   if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
                     gdp = gdpData[1][0].value;
+                    year = gdpData[1][0].date ? parseInt(gdpData[1][0].date) : null;
                   }
                   if (typeof gdp === 'number') {
                     gdpCache[countryName] = gdp;
