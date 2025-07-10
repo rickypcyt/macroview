@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { GeoJSON, MapContainer as LeafletMap, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { GeoJSON, MapContainer as LeafletMap, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngExpression, LeafletEvent } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -832,9 +832,6 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
     "Oceania": "#f472b6",
     "Antarctica": "#a3a3a3",
   };
-
-  // Para mantener el borde resaltado si el popup está abierto para ese país
-  const highlightedCountry = selectedCountry?.properties?.name || hoveredCountry;
 
   // Custom onEachFeature to handle hover and click
   function onEachCountry(feature: GeoJSON.Feature, layer: L.Layer) {
