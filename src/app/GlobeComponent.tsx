@@ -98,24 +98,53 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         setLoadingApi(false);
         return;
       }
-      // SIEMPRE usa ISO2 si existe, si no, nombre normalizado
-      fetch(`https://api.api-ninjas.com/v1/population?country=${encodeURIComponent(queryValue)}`, {
+      // Mapeo especial para nombres de países para la API
+      let apiCountryName = countryName;
+      if (apiCountryName === "Russian Federation" || apiCountryName === "Russia" || apiCountryName === "russia" || queryValue === "RU") apiCountryName = "russia";
+      if (apiCountryName === "Syrian Arab Republic") apiCountryName = "Syria";
+      if (apiCountryName === "Viet Nam") apiCountryName = "Vietnam";
+      if (apiCountryName === "Korea, Republic of") apiCountryName = "South Korea";
+      if (apiCountryName === "Korea, Democratic People's Republic of") apiCountryName = "North Korea";
+      // Puedes agregar más casos especiales aquí
+      const apiUrl = `https://api.api-ninjas.com/v1/population?country=${encodeURIComponent(apiCountryName)}`;
+      console.log({
+        countryName,
+        iso2,
+        queryKey,
+        queryValue,
+        apiCountryName,
+        apiUrl,
+        API_NINJAS_KEY: API_NINJAS_KEY ? '***' : undefined
+      });
+      fetch(apiUrl, {
         headers: { 'X-Api-Key': API_NINJAS_KEY }
       })
         .then(res => {
+          console.log('API response status:', res.status, res.statusText);
           if (!res.ok) throw new Error("No se pudo obtener la población");
           return res.json();
         })
         .then((data) => {
+          console.log('API response data:', data);
+          let population = null;
           if (data && typeof data.population === 'number') {
-            setApiPopulation(data.population);
-            populationCache[queryKey] = data.population;
-            setPopulationInStorage(queryKey, data.population);
+            population = data.population;
+          } else if (data && Array.isArray(data.historical_population) && data.historical_population.length > 0) {
+            // Tomar el valor más reciente
+            population = data.historical_population[data.historical_population.length - 1].population;
+          }
+          if (typeof population === 'number') {
+            setApiPopulation(population);
+            populationCache[queryKey] = population;
+            setPopulationInStorage(queryKey, population);
           } else {
             setApiError("No disponible en API externa");
           }
         })
-        .catch(() => setApiError("No disponible en API externa"))
+        .catch((err) => {
+          console.error('API fetch error:', err);
+          setApiError("No disponible en API externa")
+        })
         .finally(() => setLoadingApi(false));
     } else {
       setApiPopulation(null);
@@ -260,6 +289,48 @@ function ContinentLabels2D({ continents }: { continents: { name: string, lat: nu
   );
 }
 
+function CountryLabels2D({ geojson, zoom }: { geojson: any, zoom: number }) {
+  const map = useMap();
+  const [, setMapUpdate] = useState(0);
+
+  useEffect(() => {
+    function update() {
+      setMapUpdate((v) => v + 1); // Forzar re-render
+    }
+    map.on("move", update);
+    map.on("zoom", update);
+    return () => {
+      map.off("move", update);
+      map.off("zoom", update);
+    };
+  }, [map]);
+
+  if (zoom <= 3.5) return null;
+  return (
+    <>
+      {geojson.features.map((feature: any) => {
+        const [lat, lng] = getCentroid(feature.geometry.coordinates);
+        const point = map.latLngToContainerPoint([lat, lng]);
+        return (
+          <div
+            key={feature.properties.name}
+            className="absolute pointer-events-none select-none text-xs font-bold text-white bg-black/60 rounded px-2 py-1 shadow"
+            style={{
+              left: point.x,
+              top: point.y,
+              transform: "translate(-50%, -50%)",
+              zIndex: 1200,
+              whiteSpace: "nowrap"
+            }}
+          >
+            {feature.properties.name}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
   useMapEvents({
     zoomend: (e) => setZoom(e.target.getZoom()),
@@ -331,6 +402,9 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
     };
   }
 
+  // Mostrar labels centrados solo si el zoom es suficiente
+  const showLabels = zoom > 3.5;
+
   return (
     <div className="fixed inset-0 w-full h-full flex items-center justify-center bg-black">
       <LeafletMap
@@ -356,6 +430,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
           onEachFeature={onEachCountry}
         />
         <ContinentLabels2D continents={CONTINENTS_EN} />
+        <CountryLabels2D geojson={geojson} zoom={zoom} />
         {/* Leyenda de colores de continentes */}
         <div className="absolute bottom-4 right-4 bg-white/90 rounded shadow-lg p-3 z-[2000] text-sm flex flex-col gap-2 border border-gray-200">
           <div className="font-bold mb-1 text-gray-700">Continentes</div>
