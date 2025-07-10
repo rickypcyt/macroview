@@ -866,15 +866,15 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
   // Custom style para resaltar el país hovered o seleccionado
   function countryStyle(feature?: GeoJSON.Feature) {
     if (!feature || !feature.properties) return {};
-    const isHighlighted = highlightedCountry === feature.properties.name;
+    // Unificar el grosor y color de las líneas
     const continent = feature.properties.continent;
     const fillColor = continentColors[continent] || "#e5e7eb";
     return {
-      color: isHighlighted ? "#000" : "#888",
-      weight: isHighlighted ? 2.5 : 1,
+      color: "#222",
+      weight: 1,
       fillOpacity: 0.95,
       fillColor,
-      dashArray: isHighlighted ? "2 2" : undefined,
+      dashArray: undefined,
     };
   }
 
@@ -888,16 +888,12 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
         zoom={2}
         minZoom={2}
         maxBounds={[[-90, -180], [90, 180]] as LatLngBoundsExpression}
-        style={{ width: "100vw", height: "100vh", background: "#000" }}
+        style={{ width: "100vw", height: "100vh", background: "#1e40af" }}
         scrollWheelZoom={true}
         zoomControl={true}
         attributionControl={false}
       >
         <MapZoomListener setZoom={setZoom} />
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; OpenStreetMap contributors"
-        />
         <GeoJSON
           data={geojson}
           style={countryStyle}
@@ -916,7 +912,9 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
           ))}
         </div>
       </LeafletMap>
-      {hoveredCountry && hoverPos && !selectedCountry && (
+      {/* Mostrar hover solo si el país NO está como label en el mapa */}
+      {hoveredCountry && hoverPos && !selectedCountry &&
+        !(geojson.features.some(f => f.properties?.name === hoveredCountry)) && (
         <div
           className="fixed z-[2000] px-3 py-1 rounded bg-white/90 text-black text-xs font-bold pointer-events-none shadow"
           style={{ left: hoverPos.x + 12, top: hoverPos.y + 4 }}
@@ -957,22 +955,47 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
     }
   }
 
-  // Labels de países solo si el zoom es alto
-  const showCountryLabels = cameraDistance < 1.5; // Ajusta este valor según lo que consideres "zoom alto"
+  // Labels de países cuando el zoom es moderado para mejor rendimiento
+  const showCountryLabels = cameraDistance < 2.5; // Mostrar nombres en zoom moderado
 
-  // Labels de países (centroide)
+  // Labels de países (centroide) - países importantes y grandes
   const countryLabelsData = showCountryLabels
-    ? countries.map((c) => {
-        if (!c.geometry || !hasCoordinates(c.geometry)) return null;
-        // Calcular centroide
-        const coords = getCentroid((c.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
-        return {
-          lat: coords[0],
-          lng: coords[1],
-          text: c.properties?.name,
-          isCountry: true,
-        };
-      }).filter(Boolean)
+    ? countries
+        .filter((c) => {
+          // Filtrar países para evitar superposición y mejorar legibilidad
+          const name = c.properties?.name || "";
+          const area = c.properties?.AREA || c.properties?.area || 0;
+          
+          // Países importantes que siempre se muestran
+          const importantCountries = [
+            "United States", "Canada", "Mexico", "Brazil", "Argentina", "Chile",
+            "United Kingdom", "France", "Germany", "Spain", "Italy", "Poland",
+            "Russia", "China", "Japan", "India", "Australia", "South Africa",
+            "Egypt", "Nigeria", "Kenya", "Morocco", "Algeria", "Tunisia",
+            "Colombia", "Peru", "Venezuela", "Ecuador", "Bolivia", "Paraguay",
+            "Uruguay", "Guyana", "Suriname", "French Guiana", "Greenland",
+            "Iceland", "Norway", "Sweden", "Finland", "Denmark", "Netherlands",
+            "Belgium", "Switzerland", "Austria", "Czech Republic", "Hungary",
+            "Romania", "Bulgaria", "Greece", "Turkey", "Ukraine", "Belarus",
+            "Kazakhstan", "Mongolia", "Myanmar", "Thailand", "Vietnam", "Laos",
+            "Cambodia", "Malaysia", "Indonesia", "Philippines", "New Zealand",
+            "Papua New Guinea", "Fiji", "Vanuatu", "Solomon Islands"
+          ];
+          
+          // Mostrar si es importante O si es grande (>50,000 km²)
+          return importantCountries.includes(name) || area > 50000;
+        })
+        .map((c) => {
+          if (!c.geometry || !hasCoordinates(c.geometry)) return null;
+          // Calcular centroide
+          const coords = getCentroid((c.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
+          return {
+            lat: coords[0],
+            lng: coords[1],
+            text: c.properties?.name,
+            isCountry: true,
+          };
+        }).filter(Boolean)
     : [];
 
   // Labels de continentes
@@ -986,9 +1009,8 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
   // Unir labels
   const allLabelsData = [...continentLabelsData, ...countryLabelsData];
 
-  // Handler para click en país (solo si no hay labels de países)
+  // Handler para click en país (funciona con o sin labels visibles)
   function handlePolygonClick(country: GeoJSON.Feature, event?: MouseEvent) {
-    if (showCountryLabels) return;
     setSelectedCountry(country);
     if (event && 'clientX' in event && 'clientY' in event) {
       setPopupPos({ x: event.clientX, y: event.clientY });
@@ -1053,9 +1075,20 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
         labelLat={(d: object) => (d as GlobeLabel).lat}
         labelLng={(d: object) => (d as GlobeLabel).lng}
         labelText={(d: object) => (d as GlobeLabel).text}
-        labelColor={(d: object) => (d as GlobeLabel).isCountry ? "white" : "white"}
+        labelColor={(d: object) => (d as GlobeLabel).isCountry ? "#ffffff" : "#ffffff"}
         labelSize={(d: object) => (d as GlobeLabel).isCountry ? 1.1 : 2.6}
-        labelLabel={(label: object) => `<div style='font-weight:900;font-size:${(label as GlobeLabel).isCountry ? "1.1rem" : "2.2rem"};color:white;text-shadow:0 2px 8px #000,0 0 2px #000;'>${(label as GlobeLabel).text.toUpperCase()}</div>`}
+        labelLabel={(label: object) => {
+          const globeLabel = label as GlobeLabel;
+          const isCountry = globeLabel.isCountry;
+          const fontSize = isCountry ? "0.85rem" : "2.2rem";
+          const fontWeight = isCountry ? "600" : "700";
+          const padding = isCountry ? "2px 6px" : "4px 8px";
+          const borderRadius = isCountry ? "4px" : "6px";
+          const background = isCountry ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.7)";
+          const textShadow = isCountry ? "0 1px 3px #000, 0 0 2px #000" : "0 2px 6px #000, 0 0 3px #000";
+          
+          return `<div style='font-weight:${fontWeight};font-size:${fontSize};color:white;text-shadow:${textShadow};background:${background};padding:${padding};border-radius:${borderRadius};border:1px solid rgba(255,255,255,0.2);white-space:nowrap;'>${globeLabel.text}</div>`;
+        }}
         onLabelClick={(label: object) => {
           const globeLabel = label as GlobeLabel;
           if (globeLabel && globeLabel.text && globeLabel.isContinent) {
@@ -1064,9 +1097,9 @@ function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentCli
           }
         }}
         labelDotRadius={0}
-        labelAltitude={0.01}
-        labelResolution={2}
-        labelsTransitionDuration={0}
+        labelAltitude={0.02}
+        labelResolution={3}
+        labelsTransitionDuration={200}
       />
       {/* Labels de continentes HTML superpuestos eliminados */}
       {selectedCountry && popupPos && (
