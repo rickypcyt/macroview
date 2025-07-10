@@ -8,9 +8,12 @@ import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import { Tooltip, useMap } from "react-leaflet";
 import { useEffect, useRef, useState } from "react";
 
+import GlobeImport from "react-globe.gl";
 import dynamic from "next/dynamic";
 import { feature } from "topojson-client";
 import { useMapEvents } from "react-leaflet";
+
+type GlobeMethods = typeof GlobeImport;
 
 // --- Modo 2D: Mostrar nombre del país en hover ---
 
@@ -31,6 +34,8 @@ function setPopulationInStorage(countryName: string, value: number) {
     localStorage.setItem(`populationCache:${countryName}`, value.toString());
   } catch {}
 }
+
+// --- Popup modular para país (usable en 2D y 3D) ---
 
 function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeCountryName }: { country: any, position: { x: number, y: number }, onClose: () => void, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string }) {
   const popupRef = useRef<HTMLDivElement>(null);
@@ -177,7 +182,9 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
 const Globe = dynamic<any>(() => import("react-globe.gl"), { ssr: false, loading: () => <div className="text-center">Cargando globo...</div> });
 
 
-const CONTINENTS_EN = [
+// --- Helpers y lógica compartida para 2D y 3D ---
+
+export const CONTINENTS_EN = [
   { name: "NORTH AMERICA", lat: 55, lng: -100 },
   { name: "SOUTH AMERICA", lat: -18, lng: -58 },
   { name: "EUROPE", lat: 54, lng: 20 },
@@ -187,14 +194,53 @@ const CONTINENTS_EN = [
   { name: "ANTARCTICA", lat: -82, lng: 0 },
 ];
 
-// Offsets y tamaños personalizados para los labels de continentes
-const CONTINENT_LABEL_OFFSETS: Record<string, { y: number; size?: string }> = {
-  "NORTH AMERICA": { y: 40 }, // más abajo
-  "AFRICA": { y: -30 },       // más arriba
-  "ASIA": { y: -30 },         // más arriba
-  "AUSTRALIA": { y: 0, size: "text-lg md:text-xl" }, // más pequeño
-  // Otros continentes sin cambio
+export const CONTINENT_LABEL_OFFSETS: Record<string, { y: number; size?: string }> = {
+  "NORTH AMERICA": { y: 40 },
+  "AFRICA": { y: -30 },
+  "ASIA": { y: -30 },
+  "AUSTRALIA": { y: 0, size: "text-lg md:text-xl" },
 };
+
+export const COUNTRIES_PER_CONTINENT: Record<string, number> = {
+  "Europe": 50,
+  "Asia": 49,
+  "Africa": 54,
+  "North America": 23,
+  "Oceania": 14,
+  "South America": 12,
+  "Antarctica": 0,
+};
+
+export const CONTINENT_NAME_MAP: Record<string, string> = {
+  "EUROPE": "Europe",
+  "ASIA": "Asia",
+  "AFRICA": "Africa",
+  "NORTH AMERICA": "North America",
+  "SOUTH AMERICA": "South America",
+  "AUSTRALIA": "Oceania",
+  "ANTARCTICA": "Antarctica",
+};
+
+export const CONTINENT_COLORS: Record<string, string> = {
+  "Africa": "#34d399",
+  "North America": "#f87171",
+  "South America": "#fbbf24",
+  "Europe": "#60a5fa",
+  "Asia": "#a78bfa",
+  "Oceania": "#f472b6",
+  "Antarctica": "#a3a3a3",
+};
+
+export function normalizeCountryName(name: string): string {
+  const n = name
+    .toLowerCase()
+    .replace(/\b(the|of|and)\b/g, "")
+    .replace(/[^a-z]/g, "")
+    .replace(/\s+/g, "");
+  if (["unitedstatesamerica", "unitedstates", "usa"].includes(n)) return "US";
+  if (["unitedkingdom", "uk"].includes(n)) return "UK";
+  return n;
+}
 
 function getCentroid(coords: any[]): [number, number] {
   // Solo soporta MultiPolygon y Polygon
@@ -238,27 +284,6 @@ function StarBackground() {
     </div>
   );
 }
-
-// --- Hardcoded countries per continent ---
-const COUNTRIES_PER_CONTINENT: Record<string, number> = {
-  "Europe": 50,
-  "Asia": 49,
-  "Africa": 54,
-  "North America": 23,
-  "Oceania": 16,
-  "South America": 12,
-  "Antarctica": 0,
-};
-
-const CONTINENT_NAME_MAP: Record<string, string> = {
-  "EUROPE": "Europe",
-  "ASIA": "Asia",
-  "AFRICA": "Africa",
-  "NORTH AMERICA": "North America",
-  "SOUTH AMERICA": "South America",
-  "OCEANIA": "Oceania",
-  "ANTARCTICA": "Antarctica",
-};
 
 function ContinentStatsModal({ continent, onClose, countriesCount }: { continent: string, onClose: () => void, countriesCount: number }) {
   if (!continent) return null;
@@ -496,6 +521,165 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLa
   );
 }
 
+// --- Globe 3D: selección de país y popup ---
+
+function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick }: { countries: any[], popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, onContinentClick: (name: string) => void }) {
+  const [selectedCountry, setSelectedCountry] = useState<any>(null);
+  const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
+  const globeRef = useRef<any>(null);
+  const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
+  const [labelPositions, setLabelPositions] = useState<{ name: string, x: number, y: number }[]>([]);
+  // Estado para el nivel de zoom/cámara
+  const [cameraDistance, setCameraDistance] = useState(2);
+
+  // Actualiza el nivel de zoom/cámara
+  function handleCameraChange() {
+    if (globeRef.current && globeRef.current.camera()) {
+      setCameraDistance(globeRef.current.camera().position.length());
+    }
+  }
+
+  // Labels de países solo si el zoom es alto
+  const showCountryLabels = cameraDistance < 1.5; // Ajusta este valor según lo que consideres "zoom alto"
+
+  // Labels de países (centroide)
+  const countryLabelsData = showCountryLabels
+    ? countries.map((c) => {
+        // Calcular centroide
+        const coords = getCentroid(c.geometry.coordinates);
+        return {
+          lat: coords[0],
+          lng: coords[1],
+          text: c.properties?.name,
+          isCountry: true,
+        };
+      })
+    : [];
+
+  // Labels de continentes
+  const continentLabelsData = CONTINENTS_EN.map(c => ({
+    lat: c.lat,
+    lng: c.lng,
+    text: c.name,
+    isContinent: true,
+  }));
+
+  // Unir labels
+  const allLabelsData = [...continentLabelsData, ...countryLabelsData];
+
+  // Handler para click en país (solo si no hay labels de países)
+  function handlePolygonClick(country: any, event: any) {
+    if (showCountryLabels) return;
+    setSelectedCountry(country);
+    if (event && event.clientX && event.clientY) {
+      setPopupPos({ x: event.clientX, y: event.clientY });
+    } else if (globeRef.current && country) {
+      const centroid = getCentroid(country.geometry.coordinates);
+      const coords = globeRef.current.getScreenCoords(centroid[1], centroid[0]);
+      setPopupPos({ x: coords.x, y: coords.y });
+    }
+  }
+
+  // Handler para hover (opcional, si tienes highlight)
+  // Puedes desactivar el highlight si showCountryLabels
+
+  // Colores por continente
+  function getPolygonColor(country: any) {
+    const continent = country.properties?.continent;
+    return CONTINENT_COLORS[continent] || "#e5e7eb";
+  }
+
+  // Labels de continentes (usando Globe labelsData)
+  const labelsData = CONTINENTS_EN.map(c => ({
+    lat: c.lat,
+    lng: c.lng,
+    text: c.name,
+    isContinent: true,
+    bgColor: "#2229",
+    color: "#fff",
+    size: 2.2,
+  }));
+
+  // Handler para click en label de continente
+  function handleLabelClick(label: any, event: any) {
+    if (label.isContinent) {
+      setSelectedContinent(label.text);
+      if (onContinentClick) onContinentClick(label.text);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 w-full h-full flex items-center justify-center bg-black">
+      <GlobeImport
+        ref={globeRef}
+        globeImageUrl="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2048' height='1024'%3E%3Crect width='100%25' height='100%25' fill='%232563eb'/%3E%3C/svg%3E"
+        backgroundColor="#000"
+        polygonsData={countries}
+        polygonCapColor={getPolygonColor}
+        polygonSideColor={() => "#16a34a"}
+        polygonStrokeColor={() => "#166534"}
+        polygonLabel={({ properties }: any) => properties?.name}
+        polygonsTransitionDuration={0}
+        width={typeof window !== 'undefined' ? window.innerWidth : 1920}
+        height={typeof window !== 'undefined' ? window.innerHeight : 1080}
+        enablePointerInteraction={true}
+        atmosphereColor="#1e3a8a"
+        atmosphereAltitude={0.01}
+        showAtmosphere={false}
+        animateIn={false}
+        onPolygonClick={handlePolygonClick}
+        onZoom={handleCameraChange}
+        onGlobeReady={handleCameraChange}
+        labelsData={allLabelsData}
+        labelLat={(d: any) => d.lat}
+        labelLng={(d: any) => d.lng}
+        labelText={(d: any) => d.text}
+        labelColor={(d: any) => d.isCountry ? "white" : "white"}
+        labelSize={(d: any) => d.isCountry ? 1.1 : 2.6}
+        labelLabel={(label: any) => `<div style='font-weight:900;font-size:${label.isCountry ? "1.1rem" : "2.2rem"};color:white;text-shadow:0 2px 8px #000,0 0 2px #000;'>${label.text.toUpperCase()}</div>`}
+        onLabelClick={(label: any) => {
+          if (label && label.text && label.isContinent) {
+            setSelectedContinent(label.text);
+            if (onContinentClick) onContinentClick(label.text);
+          }
+        }}
+        labelDotRadius={0}
+        labelAltitude={0.01}
+        labelResolution={2}
+        labelsTransitionDuration={0}
+      />
+      {/* Labels de continentes HTML superpuestos eliminados */}
+      {selectedCountry && popupPos && (
+        <CountryInfoPopup
+          country={selectedCountry}
+          position={popupPos}
+          onClose={() => setSelectedCountry(null)}
+          popByCountry={popByCountry}
+          normalizeCountryName={normalizeCountryName}
+        />
+      )}
+      {selectedContinent && selectedContinent !== "ANTARCTICA" && (
+        <ContinentStatsModal
+          continent={selectedContinent}
+          onClose={() => setSelectedContinent(null)}
+          countriesCount={COUNTRIES_PER_CONTINENT[CONTINENT_NAME_MAP[selectedContinent]] || 0}
+        />
+      )}
+      {/* Leyenda de colores de continentes */}
+      <div className="absolute bottom-4 right-4 bg-white/90 rounded shadow-lg p-3 z-[2000] text-sm flex flex-col gap-2 border border-gray-200">
+        <div className="font-bold mb-1 text-gray-700">Continents</div>
+        {Object.entries(CONTINENT_COLORS).map(([continent, color]) => (
+          <div key={continent} className="flex items-center gap-2">
+            <span className="inline-block w-4 h-4 rounded-full border border-gray-400" style={{ background: color }}></span>
+            <span className="text-gray-800">{continent}</span>
+          </div>
+        ))}
+      </div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Fuente de países: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
+    </div>
+  );
+}
+
 export default function GlobeComponent() {
   const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
   const [countries, setCountries] = useState<any[]>([]);
@@ -509,8 +693,14 @@ export default function GlobeComponent() {
     fetch("/countries_with_continent.geo.json")
       .then((res) => res.json())
       .then((geojson) => {
-        setCountries(geojson.features);
-        setGeojson(geojson);
+        // Filtrar Bermuda por nombre o código
+        const filteredFeatures = geojson.features.filter((f: any) => {
+          const name = f.properties?.name || f.properties?.NAME || f.id || "";
+          const iso2 = f.properties?.ISO_A2 || f.properties?.iso_a2 || f.properties?.iso2 || f.id || "";
+          return name.toLowerCase() !== "bermuda" && iso2.toUpperCase() !== "BM";
+        });
+        setCountries(filteredFeatures);
+        setGeojson({ ...geojson, features: filteredFeatures });
         setLabels([]);
       });
     // Fetch población de countriesnow.space
@@ -531,39 +721,7 @@ export default function GlobeComponent() {
       });
   }, []);
 
-  // Normaliza el nombre de país para hacer matching flexible
-  function normalizeCountryName(name: string): string {
-    const n = name
-      .toLowerCase()
-      .replace(/\b(the|of|and)\b/g, "")
-      .replace(/[^a-z]/g, "")
-      .replace(/\s+/g, "");
-    // Casos especiales
-    if (["unitedstatesamerica", "unitedstates", "usa"].includes(n)) return "US";
-    if (["unitedkingdom", "uk"].includes(n)) return "UK";
-    // Puedes agregar más casos especiales aquí
-    return n;
-  }
-
-  const handleZoom = (camera: any) => {
-    if (camera && camera.position) {
-      setZoom(camera.position.length());
-    }
-  };
-
-  const visibleLabels: any[] = [];
-
-  // Custom label renderer para fondo blanco
-  const labelDotRenderer = (label: any) => {
-    if (label.isContinent) {
-      return `<div style="display:flex;align-items:center;justify-content:center;">
-        <span style="background:${label.bgColor};border-radius:10px;padding:6px 18px;font-size:2.2rem;color:${label.color};font-weight:900;text-shadow:0 2px 8px #0003;letter-spacing:2px;box-shadow:0 2px 12px #0002;">${label.text}</span>
-      </div>`;
-    }
-    return `<div style="display:flex;align-items:center;justify-content:center;">
-      <span style="background:${label.bgColor};border-radius:6px;padding:2px 6px;font-size:14px;color:${label.color};font-weight:bold;box-shadow:0 1px 4px #0002;">${label.text}</span>
-    </div>`;
-  };
+  // Mantener DRY: helpers y componentes compartidos
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center">
@@ -584,7 +742,7 @@ export default function GlobeComponent() {
               (props: any) => <ContinentLabels2D {...props} onContinentClick={setSelectedContinent} />
             }
           />
-          {selectedContinent && (
+          {selectedContinent && selectedContinent !== "ANTARCTICA" && (
             <ContinentStatsModal
               continent={selectedContinent}
               onClose={() => setSelectedContinent(null)}
@@ -593,34 +751,11 @@ export default function GlobeComponent() {
           )}
         </>
       ) : (
-        <Globe
-          globeImageUrl={"//unpkg.com/three-globe/example/img/earth-water.png"}
-          backgroundColor="#000"
-          polygonsData={countries}
-          polygonCapColor={() => "#22c55e"}
-          polygonSideColor={() => "#16a34a"}
-          polygonStrokeColor={() => "#166534"}
-          polygonLabel={({ properties }: any) => properties?.name}
-          polygonsTransitionDuration={0}
-          width={typeof window !== 'undefined' ? window.innerWidth : 1920}
-          height={typeof window !== 'undefined' ? window.innerHeight : 1080}
-          enablePointerInteraction={true}
-          atmosphereColor="#1e3a8a"
-          atmosphereAltitude={0.01}
-          showAtmosphere={false}
-          animateIn={false}
-          onGlobeReady={handleZoom}
-          onZoom={handleZoom}
-          labelsData={[]}
-          labelLat={(d: any) => d.lat}
-          labelLng={(d: any) => d.lng}
-          labelText={(d: any) => d.text}
-          labelColor={(d: any) => d.color}
-          labelSize={(d: any) => d.size}
-          labelDotRadius={0}
-          labelResolution={2}
-          labelsTransitionDuration={0}
-          labelLabel={labelDotRenderer}
+        <Globe3D
+          countries={countries}
+          popByCountry={popByCountry}
+          normalizeCountryName={normalizeCountryName}
+          onContinentClick={setSelectedContinent}
         />
       )}
     </div>
