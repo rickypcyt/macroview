@@ -121,7 +121,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
       })
         .then(res => {
           console.log('API response status:', res.status, res.statusText);
-          if (!res.ok) throw new Error("No se pudo obtener la población");
+          if (!res.ok) throw new Error("Could not obtain population");
           return res.json();
         })
         .then((data) => {
@@ -164,7 +164,7 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
         <button onClick={onClose} className="ml-2 text-gray-500 hover:text-red-500 font-bold text-lg leading-none">×</button>
       </div>
       <div className="mb-1">
-        <span className="text-gray-700">Población:</span> {typeof population === 'number' ? population.toLocaleString() :
+        <span className="text-gray-700">Population:</span> {typeof population === 'number' ? population.toLocaleString() :
           loadingApi ? <span className="italic text-gray-500 ml-2">Cargando...</span> :
           apiPopulation ? apiPopulation.toLocaleString() :
           apiError ? <span className="text-red-500 ml-2">{apiError}</span> : population}
@@ -176,14 +176,6 @@ function CountryInfoPopup({ country, position, onClose, popByCountry, normalizeC
 
 const Globe = dynamic<any>(() => import("react-globe.gl"), { ssr: false, loading: () => <div className="text-center">Cargando globo...</div> });
 
-const CONTINENTS = [
-  { name: "África", lat: 2, lng: 17 },
-  { name: "América del Norte", lat: 54, lng: -105 },
-  { name: "América del Sur", lat: -15, lng: -60 },
-  { name: "Asia", lat: 34, lng: 100 },
-  { name: "Europa", lat: 54, lng: 15 },
-  { name: "Oceanía", lat: -22, lng: 140 },
-];
 
 const CONTINENTS_EN = [
   { name: "NORTH AMERICA", lat: 55, lng: -100 },
@@ -195,14 +187,13 @@ const CONTINENTS_EN = [
   { name: "ANTARCTICA", lat: -82, lng: 0 },
 ];
 
-const CONTINENT_LABEL_OFFSETS: Record<string, { x: number; y: number }> = {
-  "NORTH AMERICA": { x: -90, y: -30 },
-  "SOUTH AMERICA": { x: -90, y: 0 },
-  "EUROPE": { x: -60, y: -30 },
-  "AFRICA": { x: -60, y: 0 },
-  "ASIA": { x: -90, y: -30 },
-  "AUSTRALIA": { x: -90, y: 0 },
-  "ANTARCTICA": { x: -80, y: 0 },
+// Offsets y tamaños personalizados para los labels de continentes
+const CONTINENT_LABEL_OFFSETS: Record<string, { y: number; size?: string }> = {
+  "NORTH AMERICA": { y: 40 }, // más abajo
+  "AFRICA": { y: -30 },       // más arriba
+  "ASIA": { y: -30 },         // más arriba
+  "AUSTRALIA": { y: 0, size: "text-lg md:text-xl" }, // más pequeño
+  // Otros continentes sin cambio
 };
 
 function getCentroid(coords: any[]): [number, number] {
@@ -248,7 +239,41 @@ function StarBackground() {
   );
 }
 
-function ContinentLabels2D({ continents }: { continents: { name: string, lat: number, lng: number }[] }) {
+// --- Hardcoded countries per continent ---
+const COUNTRIES_PER_CONTINENT: Record<string, number> = {
+  "Europe": 50,
+  "Asia": 49,
+  "Africa": 54,
+  "North America": 23,
+  "Oceania": 16,
+  "South America": 12,
+  "Antarctica": 0,
+};
+
+const CONTINENT_NAME_MAP: Record<string, string> = {
+  "EUROPE": "Europe",
+  "ASIA": "Asia",
+  "AFRICA": "Africa",
+  "NORTH AMERICA": "North America",
+  "SOUTH AMERICA": "South America",
+  "OCEANIA": "Oceania",
+  "ANTARCTICA": "Antarctica",
+};
+
+function ContinentStatsModal({ continent, onClose, countriesCount }: { continent: string, onClose: () => void, countriesCount: number }) {
+  if (!continent) return null;
+  return (
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-lg shadow-lg p-6 min-w-[320px] relative text-black">
+        <button onClick={onClose} className="absolute top-2 right-3 text-gray-500 hover:text-red-500 text-2xl font-bold">×</button>
+        <h2 className="text-xl font-bold mb-2 text-center">{continent}</h2>
+        <div className="mb-2"><span className="font-semibold">Number of countries:</span> {countriesCount}</div>
+      </div>
+    </div>
+  );
+}
+
+function ContinentLabels2D({ continents, onContinentClick }: { continents: { name: string, lat: number, lng: number }[], onContinentClick: (name: string) => void }) {
   const map = useMap();
   const [positions, setPositions] = useState<{ name: string, x: number, y: number }[]>([]);
 
@@ -256,7 +281,9 @@ function ContinentLabels2D({ continents }: { continents: { name: string, lat: nu
     function updatePositions() {
       const newPositions = continents.map((c) => {
         const point = map.latLngToContainerPoint([c.lat, c.lng]);
-        return { name: c.name, x: point.x, y: point.y };
+        // Aplica offset si existe
+        const offset = CONTINENT_LABEL_OFFSETS[c.name] || { y: 0 };
+        return { name: c.name, x: point.x, y: point.y + offset.y };
       });
       setPositions(newPositions);
     }
@@ -269,22 +296,27 @@ function ContinentLabels2D({ continents }: { continents: { name: string, lat: nu
 
   return (
     <>
-      {positions.map((c) => (
-        <div
-          key={c.name}
-          className="pointer-events-none select-none font-extrabold text-2xl md:text-4xl text-white/90 drop-shadow-lg"
-          style={{
-            position: "absolute",
-            left: c.x,
-            top: c.y,
-            zIndex: 1000,
-            textShadow: "0 2px 8px #000, 0 0 2px #000",
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          {c.name.toUpperCase()}
-        </div>
-      ))}
+      {positions.map((c) => {
+        const offset = CONTINENT_LABEL_OFFSETS[c.name] || {};
+        const sizeClass = offset.size || "text-2xl md:text-4xl";
+        return (
+          <button
+            key={c.name}
+            className={`pointer-events-auto select-none font-extrabold ${sizeClass} text-white/90 drop-shadow-lg bg-transparent border-none outline-none cursor-pointer hover:scale-105 transition`}
+            style={{
+              position: "absolute",
+              left: c.x,
+              top: c.y,
+              zIndex: 1000,
+              textShadow: "0 2px 8px #000, 0 0 2px #000",
+              transform: "translate(-50%, -50%)",
+            }}
+            onClick={() => onContinentClick(c.name)}
+          >
+            {c.name.toUpperCase()}
+          </button>
+        );
+      })}
     </>
   );
 }
@@ -341,7 +373,7 @@ function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
 }
 
 
-function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson: any, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string }) {
+function CountryMap2D({ geojson, popByCountry, normalizeCountryName, ContinentLabelsComponent }: { geojson: any, popByCountry: Record<string, number>, normalizeCountryName: (name: string) => string, ContinentLabelsComponent?: any }) {
   const [zoom, setZoom] = useState(2);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -429,7 +461,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
           style={countryStyle}
           onEachFeature={onEachCountry}
         />
-        <ContinentLabels2D continents={CONTINENTS_EN} />
+        {ContinentLabelsComponent ? <ContinentLabelsComponent continents={CONTINENTS_EN} /> : <ContinentLabels2D continents={CONTINENTS_EN} onContinentClick={() => {}} />}
         <CountryLabels2D geojson={geojson} zoom={zoom} />
         {/* Leyenda de colores de continentes */}
         <div className="absolute bottom-4 right-4 bg-white/90 rounded shadow-lg p-3 z-[2000] text-sm flex flex-col gap-2 border border-gray-200">
@@ -465,6 +497,7 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
 }
 
 export default function GlobeComponent() {
+  const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
   const [countries, setCountries] = useState<any[]>([]);
   const [labels, setLabels] = useState<any[]>([]);
   const [zoom, setZoom] = useState(1.5);
@@ -542,11 +575,23 @@ export default function GlobeComponent() {
         {mode2D ? "🌍 Modo 3D" : "🗺️ Modo 2D"}
       </button>
       {mode2D && geojson ? (
-        <CountryMap2D
-          geojson={geojson}
-          popByCountry={popByCountry}
-          normalizeCountryName={normalizeCountryName}
-        />
+        <>
+          <CountryMap2D
+            geojson={geojson}
+            popByCountry={popByCountry}
+            normalizeCountryName={normalizeCountryName}
+            ContinentLabelsComponent={
+              (props: any) => <ContinentLabels2D {...props} onContinentClick={setSelectedContinent} />
+            }
+          />
+          {selectedContinent && (
+            <ContinentStatsModal
+              continent={selectedContinent}
+              onClose={() => setSelectedContinent(null)}
+              countriesCount={COUNTRIES_PER_CONTINENT[CONTINENT_NAME_MAP[selectedContinent]] || 0}
+            />
+          )}
+        </>
       ) : (
         <Globe
           globeImageUrl={"//unpkg.com/three-globe/example/img/earth-water.png"}
