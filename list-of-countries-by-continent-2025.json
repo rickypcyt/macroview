@@ -1,0 +1,1409 @@
+[
+  {
+    "flagCode": "AF",
+    "country": "Afghanistan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "AL",
+    "country": "Albania",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "DZ",
+    "country": "Algeria",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "AS",
+    "country": "American Samoa",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "AD",
+    "country": "Andorra",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "AO",
+    "country": "Angola",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "AI",
+    "country": "Anguilla",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "AG",
+    "country": "Antigua and Barbuda",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "AR",
+    "country": "Argentina",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "AM",
+    "country": "Armenia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "AW",
+    "country": "Aruba",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "AU",
+    "country": "Australia",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "AT",
+    "country": "Austria",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "AZ",
+    "country": "Azerbaijan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "BS",
+    "country": "Bahamas",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "BH",
+    "country": "Bahrain",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "BD",
+    "country": "Bangladesh",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "BB",
+    "country": "Barbados",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "BY",
+    "country": "Belarus",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "BE",
+    "country": "Belgium",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "BZ",
+    "country": "Belize",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "BJ",
+    "country": "Benin",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "BM",
+    "country": "Bermuda",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "BT",
+    "country": "Bhutan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "BO",
+    "country": "Bolivia",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "BA",
+    "country": "Bosnia and Herzegovina",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "BW",
+    "country": "Botswana",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "BR",
+    "country": "Brazil",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "VG",
+    "country": "British Virgin Islands",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "BN",
+    "country": "Brunei",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "BG",
+    "country": "Bulgaria",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "BF",
+    "country": "Burkina Faso",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "BI",
+    "country": "Burundi",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "KH",
+    "country": "Cambodia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "CM",
+    "country": "Cameroon",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "CA",
+    "country": "Canada",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "CV",
+    "country": "Cape Verde",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "KY",
+    "country": "Cayman Islands",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "CF",
+    "country": "Central African Republic",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "TD",
+    "country": "Chad",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "CL",
+    "country": "Chile",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "CN",
+    "country": "China",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "CO",
+    "country": "Colombia",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "KM",
+    "country": "Comoros",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "CK",
+    "country": "Cook Islands",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "CR",
+    "country": "Costa Rica",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "HR",
+    "country": "Croatia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "CU",
+    "country": "Cuba",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "CW",
+    "country": "Curacao",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "CY",
+    "country": "Cyprus",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "CZ",
+    "country": "Czech Republic",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "DK",
+    "country": "Denmark",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "DJ",
+    "country": "Djibouti",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "DM",
+    "country": "Dominica",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "DO",
+    "country": "Dominican Republic",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "CD",
+    "country": "DR Congo",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "EC",
+    "country": "Ecuador",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "EG",
+    "country": "Egypt",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "SV",
+    "country": "El Salvador",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "GQ",
+    "country": "Equatorial Guinea",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "ER",
+    "country": "Eritrea",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "EE",
+    "country": "Estonia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "SZ",
+    "country": "Eswatini",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "ET",
+    "country": "Ethiopia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "FK",
+    "country": "Falkland Islands",
+    "continent": "South America",
+    "unMember": false
+  },
+  {
+    "flagCode": "FO",
+    "country": "Faroe Islands",
+    "continent": "Europe",
+    "unMember": false
+  },
+  {
+    "flagCode": "FJ",
+    "country": "Fiji",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "FI",
+    "country": "Finland",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "FR",
+    "country": "France",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "GF",
+    "country": "French Guiana",
+    "continent": "South America",
+    "unMember": false
+  },
+  {
+    "flagCode": "PF",
+    "country": "French Polynesia",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "GA",
+    "country": "Gabon",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "GM",
+    "country": "Gambia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "GE",
+    "country": "Georgia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "DE",
+    "country": "Germany",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "GH",
+    "country": "Ghana",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "GI",
+    "country": "Gibraltar",
+    "continent": "Europe",
+    "unMember": false
+  },
+  {
+    "flagCode": "GR",
+    "country": "Greece",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "GL",
+    "country": "Greenland",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "GD",
+    "country": "Grenada",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "GP",
+    "country": "Guadeloupe",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "GU",
+    "country": "Guam",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "GT",
+    "country": "Guatemala",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "GG",
+    "country": "Guernsey",
+    "continent": "Europe",
+    "unMember": false
+  },
+  {
+    "flagCode": "GN",
+    "country": "Guinea",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "GW",
+    "country": "Guinea-Bissau",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "GY",
+    "country": "Guyana",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "HT",
+    "country": "Haiti",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "HN",
+    "country": "Honduras",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "HK",
+    "country": "Hong Kong",
+    "continent": "Asia",
+    "unMember": false
+  },
+  {
+    "flagCode": "HU",
+    "country": "Hungary",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "IS",
+    "country": "Iceland",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "IN",
+    "country": "India",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "ID",
+    "country": "Indonesia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "IR",
+    "country": "Iran",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "IQ",
+    "country": "Iraq",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "IE",
+    "country": "Ireland",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "IM",
+    "country": "Isle of Man",
+    "continent": "Europe",
+    "unMember": false
+  },
+  {
+    "flagCode": "IL",
+    "country": "Israel",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "IT",
+    "country": "Italy",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "CI",
+    "country": "Ivory Coast",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "JM",
+    "country": "Jamaica",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "JP",
+    "country": "Japan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "JE",
+    "country": "Jersey",
+    "continent": "Europe",
+    "unMember": false
+  },
+  {
+    "flagCode": "JO",
+    "country": "Jordan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "KZ",
+    "country": "Kazakhstan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "KE",
+    "country": "Kenya",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "KI",
+    "country": "Kiribati",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "KW",
+    "country": "Kuwait",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "KG",
+    "country": "Kyrgyzstan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "LA",
+    "country": "Laos",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "LV",
+    "country": "Latvia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "LB",
+    "country": "Lebanon",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "LS",
+    "country": "Lesotho",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "LR",
+    "country": "Liberia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "LY",
+    "country": "Libya",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "LI",
+    "country": "Liechtenstein",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "LT",
+    "country": "Lithuania",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "LU",
+    "country": "Luxembourg",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MO",
+    "country": "Macau",
+    "continent": "Asia",
+    "unMember": false
+  },
+  {
+    "flagCode": "MG",
+    "country": "Madagascar",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MW",
+    "country": "Malawi",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MY",
+    "country": "Malaysia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "MV",
+    "country": "Maldives",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "ML",
+    "country": "Mali",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MT",
+    "country": "Malta",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MH",
+    "country": "Marshall Islands",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "MQ",
+    "country": "Martinique",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "MR",
+    "country": "Mauritania",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MU",
+    "country": "Mauritius",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "YT",
+    "country": "Mayotte",
+    "continent": "Africa",
+    "unMember": false
+  },
+  {
+    "flagCode": "MX",
+    "country": "Mexico",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "FM",
+    "country": "Micronesia",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "MD",
+    "country": "Moldova",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MC",
+    "country": "Monaco",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MN",
+    "country": "Mongolia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "ME",
+    "country": "Montenegro",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MS",
+    "country": "Montserrat",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "MA",
+    "country": "Morocco",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MZ",
+    "country": "Mozambique",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "MM",
+    "country": "Myanmar",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "NA",
+    "country": "Namibia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "NR",
+    "country": "Nauru",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "NP",
+    "country": "Nepal",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "NL",
+    "country": "Netherlands",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "NC",
+    "country": "New Caledonia",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "NZ",
+    "country": "New Zealand",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "NI",
+    "country": "Nicaragua",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "NE",
+    "country": "Niger",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "NG",
+    "country": "Nigeria",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "NU",
+    "country": "Niue",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "KP",
+    "country": "North Korea",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "MK",
+    "country": "North Macedonia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "MP",
+    "country": "Northern Mariana Islands",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "NO",
+    "country": "Norway",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "OM",
+    "country": "Oman",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "PK",
+    "country": "Pakistan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "PW",
+    "country": "Palau",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "PS",
+    "country": "Palestine",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "PA",
+    "country": "Panama",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "PG",
+    "country": "Papua New Guinea",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "PY",
+    "country": "Paraguay",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "PE",
+    "country": "Peru",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "PH",
+    "country": "Philippines",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "PL",
+    "country": "Poland",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "PT",
+    "country": "Portugal",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "PR",
+    "country": "Puerto Rico",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "QA",
+    "country": "Qatar",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "CG",
+    "country": "Republic of the Congo",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "RE",
+    "country": "Reunion",
+    "continent": "Africa",
+    "unMember": false
+  },
+  {
+    "flagCode": "RO",
+    "country": "Romania",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "RU",
+    "country": "Russia",
+    "continent": [
+      "Asia",
+      "Europe"
+    ],
+    "unMember": true
+  },
+  {
+    "flagCode": "RW",
+    "country": "Rwanda",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "BL",
+    "country": "Saint Barthelemy",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "KN",
+    "country": "Saint Kitts and Nevis",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "LC",
+    "country": "Saint Lucia",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "MF",
+    "country": "Saint Martin",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "PM",
+    "country": "Saint Pierre and Miquelon",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "VC",
+    "country": "Saint Vincent and the Grenadines",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "WS",
+    "country": "Samoa",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "SM",
+    "country": "San Marino",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "ST",
+    "country": "Sao Tome and Principe",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "SA",
+    "country": "Saudi Arabia",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "SN",
+    "country": "Senegal",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "RS",
+    "country": "Serbia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "SC",
+    "country": "Seychelles",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "SL",
+    "country": "Sierra Leone",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "SG",
+    "country": "Singapore",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "SX",
+    "country": "Sint Maarten",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "SK",
+    "country": "Slovakia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "SI",
+    "country": "Slovenia",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "SB",
+    "country": "Solomon Islands",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "SO",
+    "country": "Somalia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "ZA",
+    "country": "South Africa",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "KR",
+    "country": "South Korea",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "SS",
+    "country": "South Sudan",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "ES",
+    "country": "Spain",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "LK",
+    "country": "Sri Lanka",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "SD",
+    "country": "Sudan",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "SR",
+    "country": "Suriname",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "SE",
+    "country": "Sweden",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "CH",
+    "country": "Switzerland",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "SY",
+    "country": "Syria",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TW",
+    "country": "Taiwan",
+    "continent": "Asia",
+    "unMember": false
+  },
+  {
+    "flagCode": "TJ",
+    "country": "Tajikistan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TZ",
+    "country": "Tanzania",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "TH",
+    "country": "Thailand",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TL",
+    "country": "Timor-Leste",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TG",
+    "country": "Togo",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "TK",
+    "country": "Tokelau",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "TO",
+    "country": "Tonga",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "TT",
+    "country": "Trinidad and Tobago",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "TN",
+    "country": "Tunisia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "TR",
+    "country": "Turkey",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TM",
+    "country": "Turkmenistan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "TC",
+    "country": "Turks and Caicos Islands",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "TV",
+    "country": "Tuvalu",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "UG",
+    "country": "Uganda",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "UA",
+    "country": "Ukraine",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "AE",
+    "country": "United Arab Emirates",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "GB",
+    "country": "United Kingdom",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "US",
+    "country": "United States",
+    "continent": "North America",
+    "unMember": true
+  },
+  {
+    "flagCode": "VI",
+    "country": "United States Virgin Islands",
+    "continent": "North America",
+    "unMember": false
+  },
+  {
+    "flagCode": "UY",
+    "country": "Uruguay",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "UZ",
+    "country": "Uzbekistan",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "VU",
+    "country": "Vanuatu",
+    "continent": "Oceania",
+    "unMember": true
+  },
+  {
+    "flagCode": "VA",
+    "country": "Vatican City",
+    "continent": "Europe",
+    "unMember": true
+  },
+  {
+    "flagCode": "VE",
+    "country": "Venezuela",
+    "continent": "South America",
+    "unMember": true
+  },
+  {
+    "flagCode": "VN",
+    "country": "Vietnam",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "WF",
+    "country": "Wallis and Futuna",
+    "continent": "Oceania",
+    "unMember": false
+  },
+  {
+    "flagCode": "EH",
+    "country": "Western Sahara",
+    "continent": "Africa",
+    "unMember": false
+  },
+  {
+    "flagCode": "YE",
+    "country": "Yemen",
+    "continent": "Asia",
+    "unMember": true
+  },
+  {
+    "flagCode": "ZM",
+    "country": "Zambia",
+    "continent": "Africa",
+    "unMember": true
+  },
+  {
+    "flagCode": "ZW",
+    "country": "Zimbabwe",
+    "continent": "Africa",
+    "unMember": true
+  }
+]

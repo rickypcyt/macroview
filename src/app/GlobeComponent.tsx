@@ -277,6 +277,16 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
   const [selectedCountry, setSelectedCountry] = useState<any>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
 
+  const continentColors: Record<string, string> = {
+    "Africa": "#34d399",
+    "North America": "#f87171",
+    "South America": "#fbbf24",
+    "Europe": "#60a5fa",
+    "Asia": "#a78bfa",
+    "Oceania": "#f472b6",
+    "Antarctica": "#a3a3a3",
+  };
+
   // Para mantener el borde resaltado si el popup está abierto para ese país
   const highlightedCountry = selectedCountry?.properties?.name || hoveredCountry;
 
@@ -310,10 +320,13 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
   // Custom style para resaltar el país hovered o seleccionado
   function countryStyle(feature: any) {
     const isHighlighted = highlightedCountry === feature.properties.name;
+    const continent = feature.properties.continent;
+    const fillColor = continentColors[continent] || "#e5e7eb";
     return {
-      color: isHighlighted ? "#22c55e" : "#222",
+      color: isHighlighted ? "#000" : "#888",
       weight: isHighlighted ? 2.5 : 1,
-      fillOpacity: 0,
+      fillOpacity: 0.95,
+      fillColor,
       dashArray: isHighlighted ? "2 2" : undefined,
     };
   }
@@ -343,6 +356,16 @@ function CountryMap2D({ geojson, popByCountry, normalizeCountryName }: { geojson
           onEachFeature={onEachCountry}
         />
         <ContinentLabels2D continents={CONTINENTS_EN} />
+        {/* Leyenda de colores de continentes */}
+        <div className="absolute bottom-4 right-4 bg-white/90 rounded shadow-lg p-3 z-[2000] text-sm flex flex-col gap-2 border border-gray-200">
+          <div className="font-bold mb-1 text-gray-700">Continentes</div>
+          {Object.entries(continentColors).map(([continent, color]) => (
+            <div key={continent} className="flex items-center gap-2">
+              <span className="inline-block w-4 h-4 rounded-full border border-gray-400" style={{ background: color }}></span>
+              <span className="text-gray-800">{continent}</span>
+            </div>
+          ))}
+        </div>
       </LeafletMap>
       {hoveredCountry && hoverPos && !selectedCountry && (
         <div
@@ -375,7 +398,7 @@ export default function GlobeComponent() {
   const [popByCountry, setPopByCountry] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    fetch("/countries.geo.json")
+    fetch("/countries_with_continent.geo.json")
       .then((res) => res.json())
       .then((geojson) => {
         setCountries(geojson.features);
@@ -406,27 +429,11 @@ export default function GlobeComponent() {
       .toLowerCase()
       .replace(/\b(the|of|and)\b/g, "")
       .replace(/[^a-z]/g, "")
-      .replace(/korea,? republicof/, "southkorea")
-      .replace(/korea,? democraticpeoplesrepublicof/, "northkorea")
-      .replace(/viet nam/, "vietnam")
-      .replace(/czechia/, "czechrepublic")
-      .replace(/russianfederation/, "russia")
-      .replace(/syrianarabrepublic/, "syria")
-      .replace(/iranislamicrepublicof/, "iran")
-      .replace(/bolivia\(plurinationalstateof\)/, "bolivia")
-      .replace(/tanzaniaunitedrepublicof/, "tanzania")
-      .replace(/venezuela\(bolivarianrepublicof\)/, "venezuela")
-      .replace(/moldovarepublicof/, "moldova")
-      .replace(/palestine,? stateof/, "palestine")
-      .replace(/laopeoplesdemocraticrepublic/, "laos")
-      .replace(/brunei darussalam/, "brunei")
-      .replace(/myanmar/, "burma")
-      .replace(/unitedkingdomofgreatbritainandnorthernireland/, "unitedkingdom")
       .replace(/\s+/g, "");
-    // Special cases for US/USA
+    // Casos especiales
     if (["unitedstatesamerica", "unitedstates", "usa"].includes(n)) return "US";
-    // Special case for UK
     if (["unitedkingdom", "uk"].includes(n)) return "UK";
+    // Puedes agregar más casos especiales aquí
     return n;
   }
 
@@ -460,7 +467,11 @@ export default function GlobeComponent() {
         {mode2D ? "🌍 Modo 3D" : "🗺️ Modo 2D"}
       </button>
       {mode2D && geojson ? (
-        <CountryMap2D geojson={geojson} popByCountry={popByCountry} normalizeCountryName={normalizeCountryName} />
+        <CountryMap2D
+          geojson={geojson}
+          popByCountry={popByCountry}
+          normalizeCountryName={normalizeCountryName}
+        />
       ) : (
         <Globe
           globeImageUrl={"//unpkg.com/three-globe/example/img/earth-water.png"}
