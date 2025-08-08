@@ -18,13 +18,42 @@ interface CountrySearchProps {
 export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const filtered = useMemo(() => {
     if (!query) return [];
-    return countries.filter(c => {
+    const filteredCountries = countries.filter(c => {
       const name = c.properties?.name || c.properties?.NAME || c.id || '';
       return name.toLowerCase().includes(query.toLowerCase());
     });
+    // Reset active index when filtered results change
+    setActiveIndex(-1);
+    return filteredCountries;
   }, [query, countries]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!filtered.length) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setActiveIndex(prev => (prev < filtered.length - 1 ? prev + 1 : prev));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setActiveIndex(prev => (prev > 0 ? prev - 1 : -1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (activeIndex >= 0 && activeIndex < filtered.length) {
+          handleCountryClick(filtered[activeIndex]);
+        }
+        break;
+    }
+  };
+
+  const handleMouseEnter = (index: number) => {
+    setActiveIndex(index);
+  };
 
   const handleCountryClick = async (country: GeoJSON.Feature) => {
     const countryName = country.properties?.name || country.properties?.NAME || country.id || '';
@@ -65,6 +94,7 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffC
           onChange={e => setQuery(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+          onKeyDown={handleKeyDown}
         />
         {query && (
           <button
@@ -93,8 +123,11 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffC
                 return (
                   <li
                     key={name + idx}
-                    className="px-6 py-4 border-b border-white/20 flex justify-between items-center cursor-pointer hover:bg-white/20 transition-all duration-200 last:border-b-0"
+                    className={`px-6 py-4 border-b border-white/20 flex justify-between items-center cursor-pointer transition-all duration-200 last:border-b-0 ${
+                      activeIndex === idx ? 'bg-white/30' : 'hover:bg-white/20'
+                    }`}
                     onClick={() => handleCountryClick(c)}
+                    onMouseEnter={() => handleMouseEnter(idx)}
                   >
                     <span className="font-medium text-white text-lg">{name}</span>
                     <span className="flex flex-col items-end gap-1">

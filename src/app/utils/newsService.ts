@@ -129,13 +129,8 @@ const setCachedNews = (cacheKey: string, data: NewsItem[]): void => {
   saveCache();
 };
 
-// Fetch news from API with proper error handling
+// Fetch news from our API route which proxies to NewsAPI
 const fetchNewsFromAPI = async (query: string): Promise<NewsItem[]> => {
-  const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
-  if (!apiKey || apiKey === 'your_news_api_key_here') {
-    throw new Error('NewsAPI key not configured');
-  }
-
   // Check if we can make requests today
   if (!canMakeRequestToday()) {
     throw new Error('Daily request limit exceeded. Please try again tomorrow.');
@@ -144,41 +139,31 @@ const fetchNewsFromAPI = async (query: string): Promise<NewsItem[]> => {
   // Increment request count
   incrementRequestCount();
 
-  const response = await fetch(
-    `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=3&apiKey=${apiKey}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      mode: 'cors'
+  try {
+    const response = await fetch(`/api/news?query=${encodeURIComponent(query)}`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error: ${response.status}`);
     }
-  );
 
-  if (response.status === 429) {
-    throw new Error('Rate limit exceeded. Please try again later.');
+    const data = await response.json();
+
+    if (!data.articles || !Array.isArray(data.articles)) {
+      throw new Error('Invalid response format from news API');
+    }
+
+    return data.articles.slice(0, 3).map((article: NewsArticle) => ({
+      title: article.title || 'No title available',
+      url: article.url || '#',
+      source: article.source?.name || 'Unknown',
+      publishedAt: article.publishedAt || new Date().toISOString(),
+      description: article.description
+    }));
+  } catch (error) {
+    console.error('Error fetching news:', error);
+    throw error instanceof Error ? error : new Error('Failed to fetch news');
   }
-
-  if (!response.ok) {
-    throw new Error(`NewsAPI error: ${response.status} - ${response.statusText}`);
-  }
-
-  const data = await response.json();
-
-  if (data.status === 'error') {
-    throw new Error(data.message || 'NewsAPI returned an error');
-  }
-
-  if (!data.articles || !Array.isArray(data.articles)) {
-    throw new Error('Invalid response format from NewsAPI');
-  }
-
-  return data.articles.slice(0, 3).map((article: NewsArticle) => ({
-    title: article.title || 'No title available',
-    url: article.url || '#',
-    source: article.source?.name || 'Unknown',
-    publishedAt: article.publishedAt || new Date().toISOString(),
-    description: article.description
-  }));
 };
 
 // Main function to get news for a category

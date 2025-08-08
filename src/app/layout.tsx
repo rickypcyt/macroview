@@ -40,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <meta name="apple-mobile-web-app-title" content="MyWebSite" />;
+      <meta name="apple-mobile-web-app-title" content="MyWebSite" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}
       >

@@ -421,7 +421,7 @@ export function Dashboard({
       </div>
 
       {/* Search Card */}
-      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-8 md:mb-10 lg:mb-12">
+      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-2 md:mb-4 lg:mb-4">
         <div className="w-full">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
             <CountrySearch 
@@ -516,21 +516,21 @@ export function Dashboard({
       )}
 
       {/* Main Dashboard Grid */}
-      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 pb-8 sm:pb-12 md:pb-14 lg:pb-16">
+      <div className="w-full px-4 sm:px-6 md:px-16 lg:px-24 pb-8 sm:pb-12 md:pb-14 lg:pb-16">
         <div className="w-full space-y-6 sm:space-y-8">
           {/* Chart and Global Stats Layout */}
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 md:gap-8">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 md:gap-8 h-full">
             {/* Historical Chart - Takes remaining space */}
-            <div className="flex-1">
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20">
+            <div className="flex-1 min-h-[500px] lg:min-h-[600px]">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20 h-full">
                 <HistoricalLog />
               </div>
             </div>
 
-            {/* Global Stats Cards - Stack vertically on mobile, side by side on desktop */}
-            <div className="space-y-3 sm:space-y-4 w-full lg:w-80">
+            {/* Global Stats Cards - Stack vertically on mobile, 2x2 grid on md, vertical sidebar on lg+ */}
+            <div className="w-full lg:w-80 flex flex-col gap-3 sm:gap-6 h-full md:grid md:grid-cols-2 md:gap-4 md:auto-rows-fr lg:flex">
               {/* GDP Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
                 <div className="text-center">
                   <div className="text-lg sm:text-xl mb-1 sm:mb-2">💰</div>
                   <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
@@ -551,7 +551,7 @@ export function Dashboard({
               </div>
 
               {/* Inflation Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
                 <div className="text-center">
                   <div className="text-lg sm:text-xl mb-1 sm:mb-2">📈</div>
                   <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Inflation (%)</div>
@@ -579,7 +579,7 @@ export function Dashboard({
               </div>
 
               {/* Trade Flows Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
                 <div className="text-center">
                   <div className="text-lg sm:text-xl mb-1 sm:mb-2">🌐</div>
                   <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Trade Flows (%)</div>
@@ -601,8 +601,8 @@ export function Dashboard({
                 </div>
               </div>
 
-              {/* External Debt Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+              {/* Empty Card for Balance */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
                 <div className="text-center">
                   <div className="text-lg sm:text-xl mb-1 sm:mb-2">🏦</div>
                   <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global External Debt</div>
@@ -660,23 +660,7 @@ export function Dashboard({
                 </div>
               </div>
               
-              {/* Highest Inflation Countries */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
-                <InflationCountriesList 
-                  inflationData={globalInflationStats.distributionData} 
-                  title="🔥 Highest" 
-                  type="highest" 
-                />
-              </div>
-
-              {/* Lowest Inflation Countries */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
-                <InflationCountriesList 
-                  inflationData={globalInflationStats.distributionData} 
-                  title="❄️ Lowest" 
-                  type="lowest" 
-                />
-              </div>
+              
             </div>
           )}
           
@@ -685,19 +669,15 @@ export function Dashboard({
             <NewsSection />
           </div>
 
-
-        </div>
-      </div>
-      
-      {/* Data Sources Card - Moved to bottom */}
-      <div className="w-full px-24 pb-16">
-        <div className="w-full space-y-8">
+          {/* Data Sources Card - Responsive layout */}
+      <div className="w-full ">
+        <div className="w-full mx-auto">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
             <div className="flex items-center justify-center space-x-2 mb-4">
               <span className="text-2xl">📊</span>
               <h2 className="text-xl font-semibold text-white">Data Sources</h2>
             </div>
-            <p className="text-sm text-gray-400 text-center mb-4">Explore our trusted data providers</p>
+            <p className="text-sm text-gray-400 text-center mb-6">Explore our trusted data providers</p>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* World Bank Card */}
@@ -743,12 +723,17 @@ export function Dashboard({
               </a>
             </div>
             
-            <div className="mt-4 text-center">
-              <p className="text-xs text-gray-500">Data is cached for performance and may be delayed</p>
+            <div className="mt-6 text-center">
+              <p className="text-xs text-gray-400">Data is cached for performance and may be delayed</p>
             </div>
           </div>
         </div>
       </div>
+
+        </div>
+      </div>
+      
+      
     </div>
   );
-} 
+}

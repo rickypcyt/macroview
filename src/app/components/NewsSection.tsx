@@ -113,7 +113,7 @@ export function NewsSection() {
     <div className="w-full">
       <h2 className="text-2xl font-semibold mb-6 text-center text-white">📰 Financial & Business News</h2>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-3 gap-6">
         {categories.map((category) => (
           <div key={category.name} className="bg-white/5 rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 mb-4">
