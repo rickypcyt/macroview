@@ -5,7 +5,6 @@ import React, { useEffect, useState } from "react";
 import { CountrySearch } from "./CountrySearch";
 import { GeoJSON } from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
-import { InflationCountriesList } from "./InflationCountriesList";
 import { NewsSection } from "./NewsSection";
 import { getCachedGlobalGDP } from "../utils/worldBankApi";
 import { normalizeCountryName } from "../utils/helpers";
