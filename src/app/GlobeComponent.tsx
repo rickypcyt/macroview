@@ -2,152 +2,147 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { useEffect, useState } from "react";
+import { loadCountriesGeoJSON, loadCountryGDP, loadPopulationData } from "./utils/dataService";
+import { useCallback, useEffect, useState } from "react";
 
 import { Dashboard } from "./components/Dashboard";
 import { GeoJSON } from "geojson";
 import { Globe2D } from "./components/Globe2D";
 import { Globe3D } from "./components/Globe3D";
+import { logError } from "./utils/errorHandler";
 import { normalizeCountryName } from "./utils/helpers";
 
-// GDP cache en memoria
-const gdpCache: Record<string, number> = {};
-
-// GDP helpers para localStorage
-function getGDPFromStorage(countryName: string): number | null {
-  try {
-    const val = localStorage.getItem(`gdpCache:${countryName}`);
-    if (val) return parseFloat(val);
-  } catch {}
-  return null;
+interface GlobeComponentProps {
+  viewMode?: 'summary' | '3d' | '2d' | 'comparison';
 }
 
-function setGDPInStorage(countryName: string, value: number) {
-  try {
-    localStorage.setItem(`gdpCache:${countryName}`, value.toString());
-  } catch {}
-}
-
-type WorldBankCountry = { id: string; name: string };
-
-export default function GlobeComponent() {
+export default function GlobeComponent({ viewMode: externalViewMode }: GlobeComponentProps) {
   const [countries, setCountries] = useState<GeoJSON.Feature[]>([]);
   const [geojson, setGeojson] = useState<GeoJSON.FeatureCollection | null>(null);
   const [popByCountry, setPopByCountry] = useState<Record<string, number>>({});
   const [gdpByCountry, setGDPByCountry] = useState<Record<string, number>>({});
-  // Nuevo estado para el modo de vista
-  const [viewMode, setViewMode] = useState<'summary' | '3d' | '2d'>('summary');
+  const [viewMode, setViewMode] = useState<'summary' | '3d' | '2d' | 'comparison'>(externalViewMode || 'summary');
   const [selectedCountryFromSearch, setSelectedCountryFromSearch] = useState<GeoJSON.Feature | null>(null);
+  const [loadingStates, setLoadingStates] = useState({
+    countries: false,
+    population: false,
+    gdp: new Set<string>()
+  });
+  const [errors, setErrors] = useState<string[]>([]);
 
+  // Update internal viewMode when external viewMode changes
   useEffect(() => {
-    fetch("/countries_with_continent.geo.json")
-      .then((res) => res.json())
-      .then((geojson) => {
-        // Filtrar Bermuda por nombre o código
-        const filteredFeatures = geojson.features.filter((f: GeoJSON.Feature) => {
-          const name = f.properties?.name || f.properties?.NAME || f.id || "";
-          const iso2 = f.properties?.ISO_A2 || f.properties?.iso_a2 || f.properties?.iso2 || f.id || "";
-          return name.toLowerCase() !== "bermuda" && iso2.toUpperCase() !== "BM";
-        });
-        setCountries(filteredFeatures);
-        setGeojson({ ...geojson, features: filteredFeatures });
-        
-        // Fetch GDP para todos los países (solo una vez, usando nombre)
-        filteredFeatures.forEach((f: GeoJSON.Feature) => {
-          const countryName = f.properties?.name || f.properties?.NAME || f.id;
-          if (!countryName || typeof countryName !== 'string') return;
-          if (gdpCache[countryName]) return;
-          const localGDP = getGDPFromStorage(countryName);
-          if (localGDP) {
-            gdpCache[countryName] = localGDP;
-            setGDPByCountry(prev => ({ ...prev, [countryName]: localGDP }));
-            return;
-          }
-          // Buscar el código ISO2 por nombre
-          fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
-            .then(res => res.json())
-            .then((data) => {
-              if (!Array.isArray(data) || !Array.isArray(data[1])) return;
-              const found = data[1].find((c: WorldBankCountry) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
-              if (!found || !found.id) return;
-              const iso2 = found.id;
-              // Ahora sí, fetch GDP
-              return fetch(`https://api.worldbank.org/v2/country/${iso2}/indicator/NY.GDP.MKTP.CD?format=json&per_page=1`)
-                .then(res2 => res2.json())
-                .then((gdpData) => {
-                  let gdp = null;
-                  if (Array.isArray(gdpData) && Array.isArray(gdpData[1]) && gdpData[1][0] && typeof gdpData[1][0].value === 'number') {
-                    gdp = gdpData[1][0].value;
-                  }
-                  if (typeof gdp === 'number') {
-                    gdpCache[countryName] = gdp;
-                    setGDPInStorage(countryName, gdp);
-                    setGDPByCountry(prev => ({ ...prev, [countryName]: gdp }));
-                  }
-                });
-            })
-            .catch(() => {});
-        });
+    if (externalViewMode && externalViewMode !== viewMode) {
+      setViewMode(externalViewMode);
+    }
+  }, [externalViewMode, viewMode]);
+
+  // No internal control to change view mode here; parent controls it
+
+  // Load GDP data for a specific country (lazy loading)
+  const loadGDPForCountry = useCallback(async (countryName: string) => {
+    if (!countryName || gdpByCountry[countryName] !== undefined) {
+      return;
+    }
+
+    setLoadingStates(prev => ({
+      ...prev,
+      gdp: new Set([...prev.gdp, countryName])
+    }));
+
+    try {
+      const gdp = await loadCountryGDP(countryName);
+      if (gdp !== null) {
+        setGDPByCountry(prev => ({ ...prev, [countryName]: gdp }));
+      }
+    } catch (error) {
+      logError(error, `loadGDPForCountry:${countryName}`);
+      setErrors(prev => [...prev, `Failed to load GDP data for ${countryName}`]);
+    } finally {
+      setLoadingStates(prev => {
+        const newGdpSet = new Set(prev.gdp);
+        newGdpSet.delete(countryName);
+        return { ...prev, gdp: newGdpSet };
       });
-    // Fetch población de countriesnow.space
-    fetch("https://countriesnow.space/api/v0.1/countries/population")
-      .then((res) => res.json())
-      .then((data) => {
-        const popMap: Record<string, number> = {};
-        if (Array.isArray(data.data)) {
-          data.data.forEach((item: Record<string, unknown>) => {
-            if (item.country && Array.isArray(item.populationCounts) && item.populationCounts.length > 0) {
-              // Tomar el valor más reciente
-              const mostRecent = item.populationCounts.reduce((a: Record<string, unknown>, b: Record<string, unknown>) => (parseInt(a.year as string) > parseInt(b.year as string) ? a : b));
-              popMap[normalizeCountryName(item.country as string)] = parseInt(mostRecent.value as string);
-            }
-          });
-        }
-        setPopByCountry(popMap);
-      });
+    }
+  }, [gdpByCountry]);
+
+  // Load initial data
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        // Load countries GeoJSON
+        setLoadingStates(prev => ({ ...prev, countries: true }));
+        const { countries: countriesData, geojson: geojsonData } = await loadCountriesGeoJSON();
+        setCountries(countriesData);
+        setGeojson(geojsonData);
+        setLoadingStates(prev => ({ ...prev, countries: false }));
+
+        // Load population data
+        setLoadingStates(prev => ({ ...prev, population: true }));
+        const populationData = await loadPopulationData();
+        const normalizedPopData: Record<string, number> = {};
+        Object.entries(populationData).forEach(([country, population]) => {
+          normalizedPopData[normalizeCountryName(country)] = population;
+        });
+        setPopByCountry(normalizedPopData);
+        setLoadingStates(prev => ({ ...prev, population: false }));
+
+      } catch (error) {
+        logError(error, 'loadInitialData');
+        setErrors(prev => [...prev, 'Failed to load initial data. Please refresh the page.']);
+        setLoadingStates({
+          countries: false,
+          population: false,
+          gdp: new Set()
+        });
+      }
+    };
+
+    loadInitialData();
   }, []);
 
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center">
-      {/* Navigation Bar */}
-      <div className="absolute top-6 right-6 z-[1000]">
-        <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 p-2">
-          <div className="flex gap-1">
-            <button
-              className={`px-4 py-3 rounded-xl font-medium text-sm transition-all duration-300 ${
-                viewMode === 'summary' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
-                  : 'text-gray-300 hover:text-white hover:bg-white/10'
-              }`}
-              onClick={() => setViewMode('summary')}
+    <div className="w-full h-full flex flex-col items-center justify-center">
+      {/* Error Messages */}
+      {errors.length > 0 && (
+        <div className="absolute top-6 left-6 z-[1001] max-w-md">
+          {errors.map((error, index) => (
+            <div
+              key={index}
+              className="bg-red-500/90 backdrop-blur-sm text-white p-3 rounded-lg mb-2 shadow-lg border border-red-400/20"
             >
-              📊 Summary
-            </button>
-            <button
-              className={`px-4 py-3 rounded-xl font-medium text-sm transition-all duration-300 ${
-                viewMode === '3d' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
-                  : 'text-gray-300 hover:text-white hover:bg-white/10'
-              }`}
-              onClick={() => setViewMode('3d')}
-            >
-              🌍 3D Globe
-            </button>
-            <button
-              className={`px-4 py-3 rounded-xl font-medium text-sm transition-all duration-300 ${
-                viewMode === '2d' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
-                  : 'text-gray-300 hover:text-white hover:bg-white/10'
-              }`}
-              onClick={() => setViewMode('2d')}
-            >
-              🗺️ 2D Globe
-            </button>
+              <div className="flex justify-between items-start">
+                <span className="text-sm">{error}</span>
+                <button
+                  onClick={() => setErrors(prev => prev.filter((_, i) => i !== index))}
+                  className="ml-2 text-red-200 hover:text-white"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Loading Indicator */}
+      {(loadingStates.countries || loadingStates.population) && (
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[1001]">
+          <div className="bg-blue-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg border border-blue-400/20">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+              <span className="text-sm">
+                Loading {loadingStates.countries ? 'countries' : 'population data'}...
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+
       
-      {/* Contenido según el modo */}
+      {/* Content based on view mode */}
       {viewMode === 'summary' && (
         <Dashboard
           countries={countries}
@@ -156,6 +151,7 @@ export default function GlobeComponent() {
           gdpByCountry={gdpByCountry}
           setSelectedCountryFromSearch={setSelectedCountryFromSearch}
           selectedCountryFromSearch={selectedCountryFromSearch}
+          loadGDPForCountry={loadGDPForCountry}
         />
       )}
       
@@ -166,6 +162,7 @@ export default function GlobeComponent() {
           normalizeCountryName={normalizeCountryName}
           onContinentClick={() => {}}
           gdpByCountry={gdpByCountry}
+          loadGDPForCountry={loadGDPForCountry}
         />
       )}
       
@@ -175,6 +172,7 @@ export default function GlobeComponent() {
           popByCountry={popByCountry}
           normalizeCountryName={normalizeCountryName}
           gdpByCountry={gdpByCountry}
+          loadGDPForCountry={loadGDPForCountry}
         />
       )}
     </div>

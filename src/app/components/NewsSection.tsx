@@ -1,162 +1,185 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { getCacheStats, getNewsForCategory } from "../utils/newsService";
 
+interface NewsItem {
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  description?: string;
+}
 
+interface NewsCategory {
+  name: string;
+  query: string;
+  icon: string;
+  news: NewsItem[];
+  loading: boolean;
+  error: string | null;
+  fromCache: boolean;
+}
 
-// Cache for news data to avoid unnecessary requests
-const newsCache = {
-  data: null as {title: string, url: string, source: string, publishedAt: string, description?: string}[] | null,
-  timestamp: 0,
-  ttl: 5 * 60 * 1000 // 5 minutes cache
-};
+const DEFAULT_CATEGORIES: NewsCategory[] = [
+  { name: "Tariffs", query: "tariffs trade import export", icon: "🚢", news: [], loading: true, error: null, fromCache: false },
+  { name: "World Economy", query: "world economy gdp economic growth", icon: "🌍", news: [], loading: true, error: null, fromCache: false },
+  { name: "Inflation Rates", query: "inflation rates central bank monetary policy", icon: "📈", news: [], loading: true, error: null, fromCache: false }
+];
 
 export function NewsSection() {
-  const [news, setNews] = useState<{title: string, url: string, source: string, publishedAt: string, description?: string}[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<NewsCategory[]>(DEFAULT_CATEGORIES);
+
+  const [cacheStats, setCacheStats] = useState(getCacheStats());
+  const hasFetched = useRef(false);
+
+  // Log cache stats to console
+  useEffect(() => {
+    console.log('📊 News Cache Stats:', {
+      dailyRequestCount: cacheStats.dailyRequestCount,
+      maxDailyRequests: cacheStats.maxDailyRequests,
+      totalCachedCategories: cacheStats.totalCachedCategories,
+      lastFetchDate: cacheStats.lastFetchDate,
+      usagePercentage: Math.round((cacheStats.dailyRequestCount / cacheStats.maxDailyRequests) * 100) + '%'
+    });
+  }, [cacheStats]);
 
   useEffect(() => {
-    const fetchNews = async () => {
-      setLoading(true);
-      setError(null);
-      
-      // Check cache first
-      const now = Date.now();
-      if (newsCache.data && (now - newsCache.timestamp) < newsCache.ttl) {
-        setNews(newsCache.data);
-        setLoading(false);
-        return;
-      }
+    // Only run once when component mounts, even in Strict Mode
+    if (hasFetched.current) return;
+    hasFetched.current = true;
 
+    const fetchNewsForCategory = async (category: NewsCategory) => {
       try {
-        const apiKey = process.env.NEXT_PUBLIC_NEWS_API_KEY;
-        if (!apiKey) {
-          throw new Error('NewsAPI key not configured');
-        }
-
-        const response = await fetch(`https://newsapi.org/v2/top-headlines?country=us&category=business&pageSize=6&apiKey=${apiKey}`);
+        const result = await getNewsForCategory(category.query);
         
-        if (!response.ok) {
-          throw new Error(`NewsAPI error: ${response.status}`);
-        }
+        setCategories(prev => prev.map(cat => 
+          cat.name === category.name 
+            ? { 
+                ...cat, 
+                news: result.data, 
+                loading: false, 
+                error: result.error || null,
+                fromCache: result.fromCache
+              }
+            : cat
+        ));
 
-        const data = await response.json();
-        
-        if (data.status === 'error') {
-          throw new Error(data.message || 'NewsAPI returned an error');
-        }
-
-        if (data.articles && Array.isArray(data.articles)) {
-          const formattedNews = data.articles.slice(0, 6).map((article: { title?: string; url?: string; source?: { name?: string }; publishedAt?: string; description?: string }) => ({
-            title: article.title,
-            url: article.url,
-            source: article.source?.name || 'Unknown',
-            publishedAt: article.publishedAt || new Date().toISOString(),
-            description: article.description
-          }));
-
-          // Update cache
-          newsCache.data = formattedNews;
-          newsCache.timestamp = now;
-          
-          setNews(formattedNews);
-          setLoading(false);
-        } else {
-          throw new Error('Invalid response format from NewsAPI');
-        }
+        // Update cache stats
+        setCacheStats(getCacheStats());
       } catch (error) {
-        console.error('NewsAPI error:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load news');
-        setLoading(false);
+        console.error(`Error fetching news for ${category.name}:`, error);
+        
+        setCategories(prev => prev.map(cat => 
+          cat.name === category.name 
+            ? { 
+                ...cat, 
+                loading: false, 
+                error: error instanceof Error ? error.message : 'Failed to load news',
+                fromCache: false
+              }
+            : cat
+        ));
       }
     };
 
-    fetchNews();
+    // Fetch news for each category sequentially to avoid overwhelming the API
+    const fetchAllNews = async () => {
+      for (let i = 0; i < DEFAULT_CATEGORIES.length; i++) {
+        await fetchNewsForCategory(DEFAULT_CATEGORIES[i]);
+        // Small delay between requests to be respectful to the API
+        if (i < DEFAULT_CATEGORIES.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    };
+
+    fetchAllNews();
   }, []);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
     const diffInMs = now.getTime() - date.getTime();
-    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
     const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
     
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInDays < 7) return `${diffInDays}d ago`;
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const truncateText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
-
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-6 text-center text-white">📰 Latest Economic News</h2>
-      {loading && (
-        <div className="text-center py-8">
-          <div className="text-gray-300 text-lg">Loading news...</div>
-          <div className="mt-4 text-gray-400">Fetching latest economic headlines</div>
-        </div>
-      )}
-      {error && (
-        <div className="text-center py-8">
-          <div className="text-red-400 text-lg mb-2">⚠️ {error}</div>
-          <div className="text-gray-400">Unable to load news at this time</div>
-        </div>
-      )}
-      {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {news.map((item, idx) => (
-            <a 
-              key={idx} 
-              href={item.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20 group"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="text-blue-300 group-hover:text-blue-200 font-medium text-base leading-tight mb-2 transition-colors duration-200">
-                    {truncateText(item.title, 60)}
-                  </h3>
-                  {item.description && (
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      {truncateText(item.description, 80)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm text-gray-400">
-                <span className="flex items-center gap-1">
-                  <span className="text-blue-400">📰</span>
-                  {item.source}
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="text-green-400">📅</span>
-                  {formatDate(item.publishedAt)}
-                </span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
+    <div className="w-full">
+      <h2 className="text-2xl font-semibold mb-6 text-center text-white">📰 Financial & Business News</h2>
       
-      {/* Info about news sources */}
-      <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
-        <h3 className="text-base font-semibold text-gray-300 mb-2">ℹ️ About the news:</h3>
-        <div className="text-sm text-gray-400 space-y-1">
-          <p>• Latest economic and financial news from NewsAPI</p>
-          <p>• Click any card to read the full article</p>
-          <p>• News updates automatically when you refresh the page</p>
-          <p>• Cached for 5 minutes to reduce API calls</p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {categories.map((category) => (
+          <div key={category.name} className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">{category.icon}</span>
+              <h3 className="text-lg font-semibold text-white">{category.name}</h3>
+            </div>
+            
+            {category.loading && (
+              <div className="text-center py-4">
+                <div className="text-gray-300 text-sm">Loading...</div>
+              </div>
+            )}
+            
+            {category.error && (
+              <div className="text-center py-4">
+                <div className="text-yellow-400 text-sm">⚠️ {category.error}</div>
+              </div>
+            )}
+            
+            {!category.loading && !category.error && category.news.length > 0 && (
+              <div className="space-y-3">
+                {category.news.map((item, idx) => (
+                  <a 
+                    key={idx} 
+                    href={item.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="block p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20 group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="text-blue-300 group-hover:text-blue-200 font-medium text-base leading-tight mb-2 transition-colors duration-200">
+                          {item.title}
+                        </h4>
+                        {item.description && (
+                          <p className="text-gray-400 text-xs leading-relaxed line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                      <span className="flex items-center gap-1">
+                        <span className="text-blue-400">📰</span>
+                        {item.source}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="text-green-400">📅</span>
+                        {formatDate(item.publishedAt)}
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+            
+            {!category.loading && !category.error && category.news.length === 0 && (
+              <div className="text-center py-4">
+                <div className="text-gray-400 text-sm">No {category.name} news available</div>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
+      
+
     </div>
   );
 } 

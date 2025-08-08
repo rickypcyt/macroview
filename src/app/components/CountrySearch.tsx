@@ -8,10 +8,14 @@ interface CountrySearchProps {
   countries: GeoJSON.Feature[];
   gdpByCountry: Record<string, number>;
   inflationCache: Record<string, number>;
+  tariffCache: Record<string, number>;
   onCountryClick: (country: GeoJSON.Feature) => void;
+  loadGDPForCountry: (countryName: string) => Promise<void>;
+  loadInflationForCountry?: (countryName: string) => Promise<number | null>;
+  loadTariffForCountry?: (countryName: string) => Promise<number | null>;
 }
 
-export function CountrySearch({ countries, gdpByCountry, inflationCache, onCountryClick }: CountrySearchProps) {
+export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const filtered = useMemo(() => {
@@ -22,9 +26,31 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, onCount
     });
   }, [query, countries]);
 
+  const handleCountryClick = async (country: GeoJSON.Feature) => {
+    const countryName = country.properties?.name || country.properties?.NAME || country.id || '';
+    
+    // Load GDP data if not already loaded
+    if (!gdpByCountry[countryName]) {
+      await loadGDPForCountry(countryName);
+    }
+    
+    // Load inflation data if not already loaded and function is available
+    if (loadInflationForCountry && inflationCache[countryName] === undefined) {
+      await loadInflationForCountry(countryName);
+    }
+    
+    // Load tariff data if not already loaded and function is available
+    if (loadTariffForCountry && tariffCache[countryName] === undefined) {
+      await loadTariffForCountry(countryName);
+    }
+    
+    onCountryClick(country);
+    setQuery('');
+    setIsFocused(false);
+  };
+
   return (
     <div className="w-full">
-      <h3 className="text-xl font-semibold mb-4 text-center text-white">🔍 Search Countries</h3>
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
           <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -63,20 +89,18 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, onCount
                 const name = c.properties?.name || c.properties?.NAME || c.id || '';
                 const gdp = gdpByCountry[name];
                 const inflation = inflationCache[name];
+                const tariff = tariffCache[name];
                 return (
                   <li
                     key={name + idx}
                     className="px-6 py-4 border-b border-white/20 flex justify-between items-center cursor-pointer hover:bg-white/20 transition-all duration-200 last:border-b-0"
-                    onClick={() => {
-                      onCountryClick(c);
-                      setQuery('');
-                      setIsFocused(false);
-                    }}
+                    onClick={() => handleCountryClick(c)}
                   >
                     <span className="font-medium text-white text-lg">{name}</span>
                     <span className="flex flex-col items-end gap-1">
                       {gdp && <span className="text-green-400 text-sm font-medium">💰 GDP: ${gdp.toLocaleString()}</span>}
                       {inflation !== undefined && <span className="text-yellow-400 text-sm font-medium">📈 Inflation: {inflation.toFixed(2)}%</span>}
+                      {tariff !== undefined && <span className="text-blue-400 text-sm font-medium">🏛️ Tariff: {tariff.toFixed(2)}%</span>}
                     </span>
                   </li>
                 );

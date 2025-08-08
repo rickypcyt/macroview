@@ -7,33 +7,13 @@ import { GeoJSON } from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
 import { InflationCountriesList } from "./InflationCountriesList";
 import { NewsSection } from "./NewsSection";
+import { getCachedGlobalGDP } from "../utils/worldBankApi";
 import { normalizeCountryName } from "../utils/helpers";
 
 // Inflación cache en memoria
-const inflationCache: Record<string, number> = {};
-// Tarifa cache en memoria (por ISO3)
-const tariffByIso3: Record<string, number> = {};
-
-// Helper para cachear inflación en localStorage
-function getInflationFromStorage(countryName: string): number | null {
-  try {
-    const val = localStorage.getItem(`inflationCache:${countryName}`);
-    if (val) return parseFloat(val);
-  } catch {}
-  return null;
-}
-
-function setInflationInStorage(countryName: string, value: number) {
-  try {
-    localStorage.setItem(`inflationCache:${countryName}`, value.toString());
-  } catch {}
-}
-
-function setTariffMapInStorage(map: Record<string, number>) {
-  try {
-    localStorage.setItem('tariffByIso3', JSON.stringify(map));
-  } catch {}
-}
+  const inflationCache: Record<string, number> = {};
+  // Tariff cache en memoria
+  const tariffCache: Record<string, number> = {};
 
 function getTariffMapFromStorage(): Record<string, number> | null {
   try {
@@ -43,28 +23,6 @@ function getTariffMapFromStorage(): Record<string, number> | null {
   return null;
 }
 
-type WorldBankCountry = { id: string; name: string };
-
-// Mapeo de nombres especiales para World Bank
-const WORLD_BANK_NAME_ALIASES: Record<string, string[]> = {
-  "United States": ["United States", "United States of America", "USA", "US"],
-  "Russia": ["Russian Federation", "Russia"],
-  "South Korea": ["Korea, Rep.", "South Korea", "Korea, Republic of"],
-  "North Korea": ["Korea, Dem. People's Rep.", "North Korea", "Korea, Democratic People's Republic of"],
-  "Iran": ["Iran, Islamic Rep.", "Iran"],
-  "Egypt": ["Egypt, Arab Rep.", "Egypt"],
-  "Vietnam": ["Viet Nam", "Vietnam"],
-  "Syria": ["Syrian Arab Republic", "Syria"],
-  "Venezuela": ["Venezuela, RB", "Venezuela"],
-  "Gambia": ["Gambia, The", "Gambia"],
-  "Bahamas": ["Bahamas, The", "Bahamas"],
-  "Yemen": ["Yemen, Rep.", "Yemen"],
-  "Congo": ["Congo, Rep.", "Congo"],
-  "Congo (Democratic Republic)": ["Congo, Dem. Rep.", "Congo (Democratic Republic)", "Democratic Republic of the Congo"],
-  "Lao PDR": ["Lao PDR", "Laos"],
-  "Brunei": ["Brunei Darussalam", "Brunei"],
-};
-
 interface DashboardProps {
   countries: GeoJSON.Feature[];
   geojson: GeoJSON.FeatureCollection | null;
@@ -72,6 +30,7 @@ interface DashboardProps {
   gdpByCountry: Record<string, number>;
   setSelectedCountryFromSearch: (country: GeoJSON.Feature | null) => void;
   selectedCountryFromSearch: GeoJSON.Feature | null;
+  loadGDPForCountry: (countryName: string) => Promise<void>;
 }
 
 export function Dashboard({ 
@@ -79,475 +38,382 @@ export function Dashboard({
   popByCountry, 
   gdpByCountry, 
   setSelectedCountryFromSearch, 
-  selectedCountryFromSearch 
+  selectedCountryFromSearch,
+  loadGDPForCountry
 }: DashboardProps) {
-  // Nuevo estado para estadísticas de inflación global
+  // Estado para el PIB global
+  const [globalGDP, setGlobalGDP] = useState<{
+    value: number | null;
+    year: string | null;
+    source: string;
+    loading: boolean;
+    error: string | null;
+  }>({
+    value: null,
+    year: null,
+    source: '',
+    loading: true,
+    error: null
+  });
+
+  // Obtener el PIB global al montar el componente
+  useEffect(() => {
+    const fetchGlobalGDP = async () => {
+      try {
+        setGlobalGDP(prev => ({ ...prev, loading: true, error: null }));
+        const result = await getCachedGlobalGDP();
+        setGlobalGDP({
+          value: result.value,
+          year: result.year,
+          source: result.source,
+          loading: false,
+          error: null
+        });
+      } catch (error) {
+        setGlobalGDP(prev => ({ 
+          ...prev, 
+          loading: false, 
+          error: error instanceof Error ? error.message : 'Failed to load global GDP data' 
+        }));
+      }
+    };
+
+    fetchGlobalGDP();
+  }, []);
+
+  // Estados para datos globales
   const [globalInflationStats, setGlobalInflationStats] = useState<{
     average: number | null;
-    median: number | null;
     highest: { country: string; value: number } | null;
     lowest: { country: string; value: number } | null;
-    totalCountries: number;
-    loading: boolean;
     distributionData: { countryName: string; inflation: number }[];
-    error: string | null;
-  }>({
-    average: null,
-    median: null,
-    highest: null,
-    lowest: null,
-    totalCountries: 0,
-    loading: true,
-    distributionData: [],
-    error: null
-  });
-
-  // Nuevo estado para estadísticas de tarifas globales
-  const [globalTariffStats, setGlobalTariffStats] = useState<{
-    average: number | null;
-    median: number | null;
-    highest: { country: string; value: number } | null;
-    lowest: { country: string; value: number } | null;
-    totalCountries: number;
     loading: boolean;
     error: string | null;
   }>({
     average: null,
-    median: null,
     highest: null,
     lowest: null,
-    totalCountries: 0,
+    distributionData: [],
     loading: true,
     error: null
   });
 
-  // Estados para datos del país seleccionado
+  // Estados para país seleccionado
   const [selectedCountryInflation, setSelectedCountryInflation] = useState<number | null>(null);
   const [selectedCountryTariff, setSelectedCountryTariff] = useState<number | null>(null);
   const [selectedCountryLoading, setSelectedCountryLoading] = useState(false);
 
+  // Global trade flows stats
+  const [globalTradeStats, setGlobalTradeStats] = useState<{
+    loading: boolean;
+    value: number | null;
+    error: string | null;
+    year: string | null;
+  }>({
+    loading: false,
+    value: null,
+    error: null,
+    year: null
+  });
 
+  // Global external debt stats
+  const [globalDebtStats, setGlobalDebtStats] = useState<{
+    loading: boolean;
+    value: number | null;
+    error: string | null;
+    year: string | null;
+  }>({
+    loading: false,
+    value: null,
+    error: null,
+    year: null
+  });
 
-  // Nueva función para cargar datos de tarifas globales
-  function loadGlobalTariffData() {
-    setGlobalTariffStats(prev => ({ ...prev, loading: true, error: null }));
-    
-    // Fetch global de tarifas del World Bank - Applied Average Tariff Rates (trying different indicator)
-    fetch('https://api.worldbank.org/v2/country/all/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=300&date=2022')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch tariff data');
-        return res.json();
-      })
-      .then((data) => {
-        if (!Array.isArray(data) || !Array.isArray(data[1])) {
-          throw new Error('Invalid tariff data format');
-        }
+  // (Tariff stats removed from global section to avoid unused state)
+
+  // Función para cargar datos de inflación globales
+  async function loadGlobalInflationData() {
+    setGlobalInflationStats(prev => ({ ...prev, loading: true }));
+    try {
+      // Usar World Bank API para inflación global (FP.CPI.TOTL.ZG - Inflation, consumer prices)
+      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=2022');
+      const data = await response.json();
+      
+      if (Array.isArray(data) && Array.isArray(data[1])) {
+        interface WbIndicatorItem { value: number | null }
+        const inflationValues = (data[1] as WbIndicatorItem[])
+          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > -50 && (item.value as number) < 100)
+          .map((item: WbIndicatorItem) => item.value as number);
         
-        const validTariffData = data[1].filter((item: { countryiso3code: string; value: number }) => 
-          typeof item.countryiso3code === 'string' &&
-          typeof item.value === 'number' &&
-          item.value > 0
-        );
-        
-        if (validTariffData.length > 0) {
-          // Actualizar el cache global
-          validTariffData.forEach((item: { countryiso3code: string; value: number }) => {
-            tariffByIso3[item.countryiso3code] = item.value;
-          });
-          setTariffMapInStorage(tariffByIso3);
-          
-          // Calcular estadísticas
-          const values = validTariffData.map((item: { value: number }) => item.value);
-          const average = values.reduce((a, b) => a + b, 0) / values.length;
-          const sortedValues = [...values].sort((a, b) => a - b);
-          const median = sortedValues.length % 2 === 0 
-            ? (sortedValues[sortedValues.length / 2 - 1] + sortedValues[sortedValues.length / 2]) / 2
-            : sortedValues[Math.floor(sortedValues.length / 2)];
-          
-          const highest = validTariffData.reduce((max, current) => 
-            current.value > max.value ? current : max
-          );
-          
-          const lowest = validTariffData.reduce((min, current) => 
-            current.value < min.value ? current : min
-          );
-          
-          const newStats = {
+        if (inflationValues.length > 0) {
+          const average = inflationValues.reduce((sum, val) => sum + val, 0) / inflationValues.length;
+          setGlobalInflationStats({
             average,
-            median,
-            highest: { country: highest.countryname || highest.countryiso3code, value: highest.value },
-            lowest: { country: lowest.countryname || lowest.countryiso3code, value: lowest.value },
-            totalCountries: validTariffData.length,
-            loading: false,
-            error: null
-          };
-          
-          setGlobalTariffStats(newStats);
-          
-
-          
-
-        } else {
-          setGlobalTariffStats({
-            average: null,
-            median: null,
             highest: null,
             lowest: null,
-            totalCountries: 0,
+            distributionData: [],
             loading: false,
-            error: 'No tariff data available'
+            error: null
+          });
+        } else {
+          setGlobalInflationStats({
+            average: null,
+            highest: null,
+            lowest: null,
+            distributionData: [],
+            loading: false,
+            error: 'No inflation data available'
           });
         }
-      })
-      .catch((error) => {
-        setGlobalTariffStats(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: error.message || 'Failed to load tariff data'
-        }));
+      }
+    } catch (error) {
+      console.error('Error loading global inflation data:', error);
+      setGlobalInflationStats({
+        average: null,
+        highest: null,
+        lowest: null,
+        distributionData: [],
+        loading: false,
+        error: 'Failed to load inflation data'
       });
+    }
   }
 
-  // Nueva función para cargar datos de inflación global
-  function loadGlobalInflationData(countries: GeoJSON.Feature[]) {
-    setGlobalInflationStats(prev => ({ ...prev, loading: true, error: null }));
-    
-    // Obtener lista de países del World Bank primero
-    fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch countries list');
-        return res.json();
-      })
-      .then((data) => {
-        if (!Array.isArray(data) || !Array.isArray(data[1])) {
-          throw new Error('Invalid countries data format');
-        }
-        
-        const worldBankCountries = data[1];
-        const inflationPromises: Promise<{ countryName: string; inflation: number | null }>[] = [];
-        
-        // Crear promesas para obtener inflación de cada país
-        countries.forEach((country) => {
-          const countryName = country.properties?.name || country.properties?.NAME || country.id;
-          if (!countryName || typeof countryName !== 'string') return;
-          
-          // Verificar cache primero
-          if (inflationCache[countryName]) {
-            inflationPromises.push(Promise.resolve({ 
-              countryName, 
-              inflation: inflationCache[countryName] 
-            }));
-            return;
-          }
-          
-          // Verificar localStorage
-          const localInflation = getInflationFromStorage(countryName);
-          if (localInflation) {
-            inflationCache[countryName] = localInflation;
-            inflationPromises.push(Promise.resolve({ 
-              countryName, 
-              inflation: localInflation 
-            }));
-            return;
-          }
-          
-          // Buscar país en World Bank
-          let found = worldBankCountries.find((c: WorldBankCountry) => 
-            c.name && c.name.toLowerCase() === countryName.toLowerCase()
-          );
-          
-          if (!found) {
-            // Buscar por alias
-            const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
-            for (const alias of aliases) {
-              found = worldBankCountries.find((c: WorldBankCountry) => 
-                c.name && c.name.toLowerCase() === alias.toLowerCase()
-              );
-              if (found) break;
-            }
-          }
-          
-          if (!found) {
-            // Buscar por código ISO
-            const iso2 = country.properties?.ISO_A2 || country.properties?.iso_a2 || country.properties?.iso2;
-            if (iso2 && typeof iso2 === 'string') {
-              found = worldBankCountries.find((c: WorldBankCountry) => 
-                c.id && c.id.toUpperCase() === iso2.toUpperCase()
-              );
-            }
-          }
-          
-          if (found && found.id) {
-            // Fetch inflación
-            const promise = fetch(`https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`)
-              .then(res => {
-                if (!res.ok) throw new Error(`Failed to fetch inflation for ${countryName}`);
-                return res.json();
-              })
-              .then((inflationData) => {
-                let inflation = null;
-                if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
-                  inflation = inflationData[1][0].value;
-                }
-                
-                if (typeof inflation === 'number') {
-                  inflationCache[countryName] = inflation;
-                  setInflationInStorage(countryName, inflation);
-                }
-                
-                return { countryName, inflation };
-              })
-              .catch(() => ({ countryName, inflation: null }));
-            
-            inflationPromises.push(promise);
-          } else {
-            inflationPromises.push(Promise.resolve({ countryName, inflation: null }));
-          }
-        });
-        
-        // Esperar todas las promesas y calcular estadísticas
-        Promise.all(inflationPromises)
-          .then((results) => {
-            const validInflationData = results.filter(r => r.inflation !== null && typeof r.inflation === 'number');
-            const values = validInflationData.map(r => r.inflation as number);
-            
-            if (values.length > 0) {
-              // Calcular estadísticas
-              const average = values.reduce((a, b) => a + b, 0) / values.length;
-              const sortedValues = [...values].sort((a, b) => a - b);
-              const median = sortedValues.length % 2 === 0 
-                ? (sortedValues[sortedValues.length / 2 - 1] + sortedValues[sortedValues.length / 2]) / 2
-                : sortedValues[Math.floor(sortedValues.length / 2)];
-              
-              const highest = validInflationData.reduce((max, current) => 
-                (current.inflation as number) > (max.inflation as number) ? current : max
-              );
-              
-              const lowest = validInflationData.reduce((min, current) => 
-                (current.inflation as number) < (min.inflation as number) ? current : min
-              );
-              
-              const newStats = {
-                average,
-                median,
-                highest: { country: highest.countryName, value: highest.inflation as number },
-                lowest: { country: lowest.countryName, value: lowest.inflation as number },
-                totalCountries: validInflationData.length,
-                loading: false,
-                distributionData: validInflationData.map(r => ({ 
-                  countryName: r.countryName, 
-                  inflation: r.inflation as number 
-                })),
-                error: null
-              };
-              
-              setGlobalInflationStats(newStats);
-              
-              
-              
+  // Función para cargar inflación de un país
+  async function loadInflationForCountry(countryName: string) {
+    if (inflationCache[countryName] !== undefined) {
+      return inflationCache[countryName];
+    }
 
-            } else {
-              setGlobalInflationStats({
-                average: null,
-                median: null,
-                highest: null,
-                lowest: null,
-                totalCountries: 0,
-                loading: false,
-                distributionData: [],
-                error: 'No inflation data available'
-              });
-            }
-          })
-          .catch((error) => {
-            setGlobalInflationStats(prev => ({ 
-              ...prev, 
-              loading: false, 
-              error: error.message || 'Failed to load inflation data'
-            }));
-          });
-      })
-      .catch((error) => {
-        setGlobalInflationStats(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: error.message || 'Failed to fetch countries list'
-        }));
-      });
+    try {
+      // Buscar el país en World Bank
+      const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
+      const data = await response.json();
+      
+      if (!Array.isArray(data) || !Array.isArray(data[1])) {
+        return null;
+      }
+
+      type WbCountry = { id?: string; name?: string };
+      const wbCountries = data[1] as WbCountry[];
+      let found = wbCountries.find((c) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+      if (!found) {
+        // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
+        const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
+        found = wbCountries.find((c) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+      }
+
+      if (!found || !found.id) {
+        return null;
+      }
+
+      // Obtener datos de inflación
+      const inflationResponse = await fetch(
+        `https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
+      );
+      const inflationData = await inflationResponse.json();
+      
+      if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
+        const inflation = inflationData[1][0].value;
+        inflationCache[countryName] = inflation;
+        return inflation;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error loading inflation for', countryName, error);
+      return null;
+    }
   }
 
+  // Función para cargar aranceles de un país
+  async function loadTariffForCountry(countryName: string) {
+    if (tariffCache[countryName] !== undefined) {
+      return tariffCache[countryName];
+    }
 
+    try {
+      // Buscar el país en World Bank
+      const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
+      const data = await response.json();
+      
+      if (!Array.isArray(data) || !Array.isArray(data[1])) {
+        return null;
+      }
+
+      type WbCountry = { id?: string; name?: string };
+      const wbCountries = data[1] as WbCountry[];
+      let found = wbCountries.find((c) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
+      if (!found) {
+        // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
+        const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
+        found = wbCountries.find((c) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+      }
+
+      if (!found || !found.id) {
+        return null;
+      }
+
+      // Obtener datos de aranceles (Applied Average Tariff)
+      const tariffResponse = await fetch(
+        `https://api.worldbank.org/v2/country/${found.id}/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=1`
+      );
+      const tariffData = await tariffResponse.json();
+      
+      if (Array.isArray(tariffData) && Array.isArray(tariffData[1]) && tariffData[1][0] && typeof tariffData[1][0].value === 'number') {
+        const tariff = tariffData[1][0].value;
+        tariffCache[countryName] = tariff;
+        return tariff;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error loading tariff for', countryName, error);
+      return null;
+    }
+  }
 
   // Función para cargar datos del país seleccionado
-  function loadSelectedCountryData(country: GeoJSON.Feature) {
+  const loadSelectedCountryData = React.useCallback(async (country: GeoJSON.Feature) => {
     const countryName = country.properties?.name || country.properties?.NAME || country.id;
-    const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
-    
+    if (!countryName) return;
+
     setSelectedCountryLoading(true);
-    setSelectedCountryInflation(null);
-    setSelectedCountryTariff(null);
-
-    // Cargar inflación del país
-    if (countryName && typeof countryName === 'string') {
-      // Verificar cache primero
-      if (inflationCache[countryName]) {
-        setSelectedCountryInflation(inflationCache[countryName]);
+    
+    // Cargar inflación
+    let inflation = inflationCache[countryName];
+    if (inflation === undefined || inflation === null || isNaN(inflation)) {
+      inflation = await loadInflationForCountry(countryName);
+      if (inflation !== null) {
+        setSelectedCountryInflation(inflation);
       } else {
-        // Verificar localStorage
-        const localInflation = getInflationFromStorage(countryName);
-        if (localInflation) {
-          inflationCache[countryName] = localInflation;
-          setSelectedCountryInflation(localInflation);
-        } else {
-          // Fetch desde API
-          fetch(`https://api.worldbank.org/v2/country?format=json&per_page=300`)
-            .then(res => res.json())
-            .then((data) => {
-              if (!Array.isArray(data) || !Array.isArray(data[1])) return;
-              let found = data[1].find((c: WorldBankCountry) => 
-                c.name && c.name.toLowerCase() === countryName.toLowerCase()
-              );
-              
-              if (!found) {
-                // Buscar por alias
-                const aliases = WORLD_BANK_NAME_ALIASES[countryName] || [];
-                for (const alias of aliases) {
-                  found = data[1].find((c: WorldBankCountry) => 
-                    c.name && c.name.toLowerCase() === alias.toLowerCase()
-                  );
-                  if (found) break;
-                }
-              }
-              
-              if (found && found.id) {
-                return fetch(`https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`)
-                  .then(res => res.json())
-                  .then((inflationData) => {
-                    let inflation = null;
-                    if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
-                      inflation = inflationData[1][0].value;
-                    }
-                    
-                    if (typeof inflation === 'number') {
-                      inflationCache[countryName] = inflation;
-                      setInflationInStorage(countryName, inflation);
-                      setSelectedCountryInflation(inflation);
-                    }
-                  })
-                  .catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
-      }
-    }
-
-    // Cargar tarifa del país
-    if (iso3 && typeof iso3 === 'string') {
-      console.log('Loading tariff for ISO3:', iso3); // Debug log
-      console.log('Country name:', countryName); // Debug log
-      
-      // Verificar cache primero
-      if (tariffByIso3[iso3]) {
-        console.log('Found tariff in cache:', tariffByIso3[iso3]); // Debug log
-        setSelectedCountryTariff(tariffByIso3[iso3]);
-      } else {
-        // Verificar localStorage
-        const tariffMap = getTariffMapFromStorage();
-        if (tariffMap && tariffMap[iso3]) {
-          console.log('Found tariff in localStorage:', tariffMap[iso3]); // Debug log
-          tariffByIso3[iso3] = tariffMap[iso3];
-          setSelectedCountryTariff(tariffMap[iso3]);
-        } else {
-          // Fetch desde API
-          console.log('Fetching tariff from API for ISO3:', iso3); // Debug log
-          fetch('https://api.worldbank.org/v2/country/all/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=300&date=2022')
-            .then(res => {
-              console.log('Tariff API response status:', res.status); // Debug log
-              if (!res.ok) throw new Error('Failed to fetch tariff data');
-              return res.json();
-            })
-            .then((data) => {
-              console.log('Tariff API data received:', data); // Debug log
-              if (!Array.isArray(data) || !Array.isArray(data[1])) {
-                console.log('Invalid tariff data format'); // Debug log
-                return;
-              }
-              
-              const map: Record<string, number> = {};
-              
-              // Log all available countries for debugging
-              console.log('All available countries in tariff data:');
-              data[1].slice(0, 20).forEach((item: { countryname?: string; countryiso3code?: string; value?: number }) => {
-                console.log(`- ${item.countryname || 'Unknown'} (${item.countryiso3code || 'N/A'}): ${item.value || 'N/A'}`);
-              });
-              
-              data[1].forEach((item: { countryiso3code: string; value: number; countryname?: string }) => {
-                if (typeof item.countryiso3code === 'string' && typeof item.value === 'number') {
-                  map[item.countryiso3code] = item.value;
-                  if (item.countryiso3code === iso3) {
-                    console.log('Found tariff for ISO3:', iso3, 'Value:', item.value, 'Country:', item.countryname); // Debug log
-                  }
-                }
-              });
-              
-              Object.assign(tariffByIso3, map);
-              setTariffMapInStorage(map);
-              
-              if (map[iso3]) {
-                console.log('Setting tariff value:', map[iso3]); // Debug log
-                setSelectedCountryTariff(map[iso3]);
-              } else {
-                console.log('No tariff found for ISO3:', iso3); // Debug log
-                console.log('Available ISO3 codes:', Object.keys(map).slice(0, 10)); // Debug log
-                
-                // Try to find by country name as fallback
-                const countryData = data[1].find((item: { countryname?: string; value?: number }) => 
-                  item.countryname && item.countryname.toLowerCase().includes(countryName?.toLowerCase() || '')
-                );
-                if (countryData && countryData.value) {
-                  console.log('Found tariff by country name:', countryData.countryname, 'Value:', countryData.value);
-                  setSelectedCountryTariff(countryData.value);
-                }
-              }
-            })
-            .catch((error) => {
-              console.error('Error fetching tariff data:', error); // Debug log
-            });
-        }
+        setSelectedCountryInflation(null);
       }
     } else {
-      console.log('No ISO3 code available for country:', countryName); // Debug log
+      setSelectedCountryInflation(inflation);
     }
-
+    
+    // Cargar tarifa
+    const tariffMap = getTariffMapFromStorage();
+    if (tariffMap && tariffMap[countryName] !== undefined && tariffMap[countryName] !== null && !isNaN(tariffMap[countryName])) {
+      setSelectedCountryTariff(tariffMap[countryName]);
+    } else {
+      setSelectedCountryTariff(null);
+    }
+    
     setSelectedCountryLoading(false);
-  }
+  }, []);
 
-  // Cargar datos del país seleccionado cuando cambie
+  // Cargar datos cuando cambie el país seleccionado
   useEffect(() => {
     if (selectedCountryFromSearch) {
       loadSelectedCountryData(selectedCountryFromSearch);
     }
-  }, [selectedCountryFromSearch]);
+  }, [selectedCountryFromSearch, loadSelectedCountryData]);
 
-  // Cargar datos al montar el componente
+  // Función para cargar datos de flujos comerciales globales
+  async function loadGlobalTradeData() {
+    setGlobalTradeStats(prev => ({ ...prev, loading: true }));
+    try {
+      // Usar World Bank API para datos de comercio (TG.VAL.TOTL.GD.ZS - Trade as % of GDP)
+      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/TG.VAL.TOTL.GD.ZS?format=json&per_page=200&date=2021');
+      const data = await response.json();
+      
+      if (Array.isArray(data) && Array.isArray(data[1])) {
+        interface WbIndicatorItem { value: number | null }
+        const tradeValues = (data[1] as WbIndicatorItem[])
+          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > 0)
+          .map((item: WbIndicatorItem) => item.value as number);
+        
+        if (tradeValues.length > 0) {
+          const average = tradeValues.reduce((sum, val) => sum + val, 0) / tradeValues.length;
+          setGlobalTradeStats({
+            loading: false,
+            value: average,
+            error: null,
+            year: '2021'
+          });
+        } else {
+          setGlobalTradeStats({
+            loading: false,
+            value: null,
+            error: 'No trade data available',
+            year: null
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading global trade data:', error);
+      setGlobalTradeStats({
+        loading: false,
+        value: null,
+        error: 'Failed to load trade data',
+        year: null
+      });
+    }
+  }
+
+  // Función para cargar datos de deuda externa global
+  async function loadGlobalDebtData() {
+    setGlobalDebtStats(prev => ({ ...prev, loading: true }));
+    try {
+      // Usar World Bank API para datos de deuda externa (DT.DOD.DECT.CD - External debt stocks)
+      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/DT.DOD.DECT.CD?format=json&per_page=200&date=2021');
+      const data = await response.json();
+      
+      if (Array.isArray(data) && Array.isArray(data[1])) {
+        interface WbIndicatorItem { value: number | null }
+        const debtValues = (data[1] as WbIndicatorItem[])
+          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > 0)
+          .map((item: WbIndicatorItem) => item.value as number);
+        
+        if (debtValues.length > 0) {
+          const totalDebt = debtValues.reduce((sum, val) => sum + val, 0);
+          setGlobalDebtStats({
+            loading: false,
+            value: totalDebt,
+            error: null,
+            year: '2021'
+          });
+        } else {
+          setGlobalDebtStats({
+            loading: false,
+            value: null,
+            error: 'No debt data available',
+            year: null
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading global debt data:', error);
+      setGlobalDebtStats({
+        loading: false,
+        value: null,
+        error: 'Failed to load debt data',
+        year: null
+      });
+    }
+  }
+
+  // Cargar datos globales cuando los países estén disponibles
   useEffect(() => {
     if (countries.length > 0) {
-      loadGlobalInflationData(countries);
-      loadGlobalTariffData();
+      loadGlobalInflationData();
+      loadGlobalTradeData();
+      loadGlobalDebtData();
     }
   }, [countries]);
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
       {/* Header Card */}
-      <div className="w-full p-6 pt-8 px-12">
+      <div className="w-full p-4 sm:p-6 md:p-8 lg:p-12 pt-4 sm:pt-6 md:pt-8 lg:pt-8 pb-2 sm:pb-4 md:pb-4 lg:pb-4 px-4 sm:px-6 md:px-12 lg:px-24">
         <div className="w-full">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
-            <h1 className="text-4xl md:text-5xl font-bold text-center mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-2 sm:mb-3 md:mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
               🌐 Global Financial Dashboard
             </h1>
-            <p className="text-gray-300 text-center text-lg">
+            <p className="text-gray-300 text-center text-sm sm:text-base md:text-lg">
               Real-time economic indicators and global financial data
             </p>
           </div>
@@ -555,14 +421,18 @@ export function Dashboard({
       </div>
 
       {/* Search Card */}
-      <div className="w-full px-12 mb-6">
+      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-8 md:mb-10 lg:mb-12">
         <div className="w-full">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
             <CountrySearch 
               countries={countries} 
               gdpByCountry={gdpByCountry} 
               inflationCache={inflationCache} 
-              onCountryClick={setSelectedCountryFromSearch} 
+              tariffCache={tariffCache}
+              onCountryClick={setSelectedCountryFromSearch}
+              loadGDPForCountry={loadGDPForCountry}
+              loadInflationForCountry={loadInflationForCountry}
+              loadTariffForCountry={loadTariffForCountry}
             />
           </div>
         </div>
@@ -570,15 +440,15 @@ export function Dashboard({
 
       {/* Selected Country Info Card */}
       {selectedCountryFromSearch && (
-        <div className="w-full px-12 mb-6">
+        <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-8 md:mb-10 lg:mb-12">
           <div className="w-full">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
               <div className="flex justify-between items-start mb-4">
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white">
                   {selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id}
                 </h2>
                 <button
-                  className="text-white text-xl font-bold hover:text-green-400 focus:outline-none transition-colors"
+                  className="text-white text-lg sm:text-xl font-bold hover:text-green-400 focus:outline-none transition-colors"
                   onClick={() => setSelectedCountryFromSearch(null)}
                   aria-label="Close"
                 >
@@ -586,11 +456,11 @@ export function Dashboard({
                 </button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
                 {/* GDP */}
-                <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-lg text-gray-300 font-semibold mb-2">💰 GDP (USD)</div>
-                  <div className="text-xl font-bold text-green-400">
+                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">💰 GDP (USD)</div>
+                  <div className="text-base sm:text-lg md:text-xl font-bold text-green-400">
                     {gdpByCountry[selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || ''] 
                       ? `$${gdpByCountry[selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || ''].toLocaleString()}`
                       : <span className="text-gray-400">Not available</span>}
@@ -598,9 +468,9 @@ export function Dashboard({
                 </div>
 
                 {/* Population */}
-                <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-lg text-gray-300 font-semibold mb-2">👥 Population</div>
-                  <div className="text-xl font-bold text-blue-400">
+                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">👥 Population</div>
+                  <div className="text-base sm:text-lg md:text-xl font-bold text-blue-400">
                     {popByCountry[normalizeCountryName(selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || '')]
                       ? popByCountry[normalizeCountryName(selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || '')].toLocaleString()
                       : <span className="text-gray-400">Not available</span>}
@@ -608,20 +478,20 @@ export function Dashboard({
                 </div>
 
                 {/* Continent */}
-                <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-lg text-gray-300 font-semibold mb-2">🌍 Continent</div>
-                  <div className="text-xl font-bold text-purple-400">
+                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">🌍 Continent</div>
+                  <div className="text-base sm:text-lg md:text-xl font-bold text-purple-400">
                     {selectedCountryFromSearch.properties?.continent || <span className="text-gray-400">Not available</span>}
                   </div>
                 </div>
               </div>
 
               {/* Additional Info Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {/* Inflation */}
-                <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-lg text-gray-300 font-semibold mb-2">📈 Inflation (%)</div>
-                  <div className="text-xl font-bold text-yellow-400">
+                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">📈 Inflation (%)</div>
+                  <div className="text-base sm:text-lg md:text-xl font-bold text-yellow-400">
                     {selectedCountryLoading ? 'Loading...' :
                      selectedCountryInflation !== null ? 
                        `${selectedCountryInflation.toFixed(2)}%` : 
@@ -630,9 +500,9 @@ export function Dashboard({
                 </div>
 
                 {/* Tariff */}
-                <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-lg text-gray-300 font-semibold mb-2">🏛️ Applied Average Tariff (%)</div>
-                  <div className="text-xl font-bold text-blue-400">
+                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">🏛️ Applied Average Tariff (%)</div>
+                  <div className="text-base sm:text-lg md:text-xl font-bold text-blue-400">
                     {selectedCountryLoading ? 'Loading...' :
                      selectedCountryTariff !== null ? 
                        `${selectedCountryTariff.toFixed(2)}%` : 
@@ -646,94 +516,127 @@ export function Dashboard({
       )}
 
       {/* Main Dashboard Grid */}
-      <div className="w-full px-12 pb-8">
-        <div className="w-full space-y-6">
-          {/* Financial Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* GDP Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
-              <div className="text-center">
-                <div className="text-2xl mb-2">💰</div>
-                <div className="text-lg font-medium text-gray-300 mb-2">Global GDP (USD)</div>
-                <div className="text-2xl md:text-3xl font-bold text-green-400">
-                  {Object.values(gdpByCountry).length > 0
-                    ? `$${(Object.values(gdpByCountry).reduce((a, b) => a + b, 0) / 1e12).toFixed(2)}T`
-                    : 'Loading...'}
-                </div>
-                <div className="text-sm text-gray-400 mt-2">
-                  Total economic output
-                </div>
+      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 pb-8 sm:pb-12 md:pb-14 lg:pb-16">
+        <div className="w-full space-y-6 sm:space-y-8">
+          {/* Chart and Global Stats Layout */}
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 md:gap-8">
+            {/* Historical Chart - Takes remaining space */}
+            <div className="flex-1">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20">
+                <HistoricalLog />
               </div>
             </div>
 
-            {/* Inflation Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
-              <div className="text-center">
-                <div className="text-2xl mb-2">📈</div>
-                <div className="text-lg font-medium text-gray-300 mb-2">Global Inflation (%)</div>
-                <div className="text-2xl md:text-3xl font-bold text-yellow-400">
-                  {globalInflationStats.loading ? 'Loading...' :
-                   globalInflationStats.error ? 'Error' :
-                   globalInflationStats.average !== null ? 
-                     `${globalInflationStats.average.toFixed(2)}%` : 
-                     'Not available'}
+            {/* Global Stats Cards - Stack vertically on mobile, side by side on desktop */}
+            <div className="space-y-3 sm:space-y-4 w-full lg:w-80">
+              {/* GDP Card */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="text-center">
+                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">💰</div>
+                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
+                    Global GDP (USD{globalGDP.year ? `, ${globalGDP.year}` : ''})
+                  </div>
+                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-green-400">
+                    {globalGDP.loading 
+                      ? 'Loading...' 
+                      : globalGDP.error 
+                        ? 'Error loading data' 
+                        : `$${(globalGDP.value! / 1e12).toFixed(2)}T`
+                    }
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
+                    {globalGDP.source || 'Loading source...'}
+                  </div>
                 </div>
-                {globalInflationStats.totalCountries > 0 && (
-                  <div className="text-sm text-gray-400 mt-2">
-                    Based on {globalInflationStats.totalCountries} countries
-                  </div>
-                )}
-                {globalInflationStats.error && (
-                  <div className="text-sm text-red-400 mt-2">
-                    {globalInflationStats.error}
-                  </div>
-                )}
               </div>
-            </div>
 
-            {/* Tariff Card */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
-              <div className="text-center">
-                <div className="text-2xl mb-2">🏛️</div>
-                <div className="text-lg font-medium text-gray-300 mb-2">Applied Average Tariff (%)</div>
-                <div className="text-2xl md:text-3xl font-bold text-blue-400">
-                  {globalTariffStats.loading ? 'Loading...' :
-                   globalTariffStats.error ? 'Error' :
-                   globalTariffStats.average !== null ? 
-                     `${globalTariffStats.average.toFixed(2)}%` : 
-                     'Not available'}
+              {/* Inflation Card */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="text-center">
+                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">📈</div>
+                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Inflation (%)</div>
+                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-yellow-400">
+                    {globalInflationStats.loading ? 'Loading...' :
+                     globalInflationStats.error ? 'Error' :
+                     globalInflationStats.average !== null ? 
+                       `${globalInflationStats.average.toFixed(2)}%` : 
+                       'Not available'}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
+                    World Bank - Consumer Price Index (2022)
+                  </div>
+                  {globalInflationStats.distributionData.length > 0 && (
+                    <div className="text-xs text-gray-400 mt-1 sm:mt-2">
+                      Based on {globalInflationStats.distributionData.length} countries
+                    </div>
+                  )}
+                  {globalInflationStats.error && (
+                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
+                      {globalInflationStats.error}
+                    </div>
+                  )}
                 </div>
-                {globalTariffStats.totalCountries > 0 && (
-                  <div className="text-sm text-gray-400 mt-2">
-                    Based on {globalTariffStats.totalCountries} countries
+              </div>
+
+              {/* Trade Flows Card */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="text-center">
+                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">🌐</div>
+                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Trade Flows (%)</div>
+                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-purple-400">
+                    {globalTradeStats.loading ? 'Loading...' :
+                     globalTradeStats.error ? 'Error' :
+                     globalTradeStats.value !== null ? 
+                       `${globalTradeStats.value.toFixed(1)}%` : 
+                       'Not available'}
                   </div>
-                )}
-                {globalTariffStats.error && (
-                  <div className="text-sm text-red-400 mt-2">
-                    {globalTariffStats.error}
+                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
+                    World Bank - Trade as % of GDP (2021)
                   </div>
-                )}
+                  {globalTradeStats.error && (
+                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
+                      {globalTradeStats.error}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* External Debt Card */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="text-center">
+                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">🏦</div>
+                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global External Debt</div>
+                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-red-400">
+                    {globalDebtStats.loading ? 'Loading...' :
+                     globalDebtStats.error ? 'Error' :
+                     globalDebtStats.value !== null ? 
+                       `$${(globalDebtStats.value / 1e12).toFixed(2)}T` : 
+                       'Not available'}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
+                    World Bank - External Debt Stocks (2021)
+                  </div>
+                  {globalDebtStats.error && (
+                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
+                      {globalDebtStats.error}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
           
           {/* Detailed Inflation Statistics - 3 Columns */}
-          {!globalInflationStats.loading && globalInflationStats.totalCountries > 0 && !globalInflationStats.error && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {!globalInflationStats.loading && globalInflationStats.distributionData.length > 0 && !globalInflationStats.error && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10 lg:gap-12">
               {/* Statistics Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
                 <h2 className="text-xl md:text-2xl font-semibold mb-4 text-center text-white">📊 Statistics</h2>
                 <div className="space-y-3">
                   <div className="text-center p-3 bg-white/5 rounded-xl">
                     <div className="text-base font-medium text-gray-300 mb-1">Average</div>
                     <div className="text-xl font-bold text-yellow-400">
                       {globalInflationStats.average?.toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="text-center p-3 bg-white/5 rounded-xl">
-                    <div className="text-base font-medium text-gray-300 mb-1">Median</div>
-                    <div className="text-xl font-bold text-yellow-400">
-                      {globalInflationStats.median?.toFixed(2)}%
                     </div>
                   </div>
                   <div className="text-center p-3 bg-white/5 rounded-xl">
@@ -758,7 +661,7 @@ export function Dashboard({
               </div>
               
               {/* Highest Inflation Countries */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
                 <InflationCountriesList 
                   inflationData={globalInflationStats.distributionData} 
                   title="🔥 Highest" 
@@ -767,7 +670,7 @@ export function Dashboard({
               </div>
 
               {/* Lowest Inflation Countries */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
                 <InflationCountriesList 
                   inflationData={globalInflationStats.distributionData} 
                   title="❄️ Lowest" 
@@ -777,14 +680,72 @@ export function Dashboard({
             </div>
           )}
           
-          {/* Historical Log Card */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
-            <HistoricalLog />
+          {/* News Section Card */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
+            <NewsSection />
           </div>
 
-          {/* News Section Card */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 border border-white/20">
-            <NewsSection />
+
+        </div>
+      </div>
+      
+      {/* Data Sources Card - Moved to bottom */}
+      <div className="w-full px-24 pb-16">
+        <div className="w-full space-y-8">
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
+            <div className="flex items-center justify-center space-x-2 mb-4">
+              <span className="text-2xl">📊</span>
+              <h2 className="text-xl font-semibold text-white">Data Sources</h2>
+            </div>
+            <p className="text-sm text-gray-400 text-center mb-4">Explore our trusted data providers</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* World Bank Card */}
+              <a 
+                href="https://data.worldbank.org/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="text-2xl mb-2">🌍</div>
+                  <h3 className="font-medium text-gray-200">World Bank</h3>
+                  <p className="text-xs text-gray-400 mt-1">Open Data</p>
+                </div>
+              </a>
+              
+              {/* IMF Card */}
+              <a 
+                href="https://www.imf.org/en/Data" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="text-2xl mb-2">📈</div>
+                  <h3 className="font-medium text-gray-200">IMF</h3>
+                  <p className="text-xs text-gray-400 mt-1">World Economic Outlook</p>
+                </div>
+              </a>
+              
+              {/* NewsAPI Card */}
+              <a 
+                href="https://newsapi.org/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="text-2xl mb-2">📰</div>
+                  <h3 className="font-medium text-gray-200">NewsAPI</h3>
+                  <p className="text-xs text-gray-400 mt-1">News Headlines</p>
+                </div>
+              </a>
+            </div>
+            
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-500">Data is cached for performance and may be delayed</p>
+            </div>
           </div>
         </div>
       </div>

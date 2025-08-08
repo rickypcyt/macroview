@@ -1,8 +1,28 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartOptions
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
 
-
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface HistoricalDataPoint {
   date: string;
@@ -10,17 +30,18 @@ interface HistoricalDataPoint {
   year: string;
 }
 
+
+
 export function HistoricalLog() {
-  const [activeTab, setActiveTab] = useState<'inflation' | 'gdp' | 'tariff'>('inflation');
-  const [showAll, setShowAll] = useState(false);
+  const [activeTab, setActiveTab] = useState<'inflation' | 'gdp'>('inflation');
+  const [timePeriod, setTimePeriod] = useState<5 | 10 | 15 | 20>(10);
+
   const [historicalData, setHistoricalData] = useState<{
     inflation: HistoricalDataPoint[];
     gdp: HistoricalDataPoint[];
-    tariff: HistoricalDataPoint[];
   }>({
     inflation: [],
-    gdp: [],
-    tariff: []
+    gdp: []
   });
   const [loading, setLoading] = useState(false);
 
@@ -53,7 +74,7 @@ export function HistoricalLog() {
             value: data.total / data.count,
             year
           }))
-          .sort((a, b) => parseInt(b.year) - parseInt(a.year)); // Newest to oldest
+          .sort((a, b) => parseInt(a.year) - parseInt(b.year)); // Oldest to newest for chart
 
         setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
       }
@@ -86,7 +107,7 @@ export function HistoricalLog() {
             value: data.total,
             year
           }))
-          .sort((a, b) => parseInt(b.year) - parseInt(a.year)); // Newest to oldest
+          .sort((a, b) => parseInt(a.year) - parseInt(b.year)); // Oldest to newest for chart
 
         setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
       }
@@ -94,38 +115,7 @@ export function HistoricalLog() {
       console.log('Failed to fetch historical GDP data');
     }
 
-    try {
-      // Fetch historical tariff data (last 20 years)
-      const tariffResponse = await fetch('https://api.worldbank.org/v2/country/all/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=200&date=2004:2024');
-      const tariffData = await tariffResponse.json();
-      
-      if (tariffData && tariffData[1]) {
-        const tariffByYear: Record<string, { total: number; count: number }> = {};
-        
-        tariffData[1].forEach((item: { value?: number; date?: string }) => {
-          if (item.value && item.date) {
-            const year = item.date;
-            if (!tariffByYear[year]) {
-              tariffByYear[year] = { total: 0, count: 0 };
-            }
-            tariffByYear[year].total += item.value;
-            tariffByYear[year].count += 1;
-          }
-        });
 
-        const tariffHistory = Object.entries(tariffByYear)
-          .map(([year, data]) => ({
-            date: `${year}-01-01`,
-            value: data.total / data.count,
-            year
-          }))
-          .sort((a, b) => parseInt(b.year) - parseInt(a.year)); // Newest to oldest
-
-        setHistoricalData(prev => ({ ...prev, tariff: tariffHistory }));
-      }
-    } catch {
-      console.log('Failed to fetch historical tariff data');
-    }
 
     setLoading(false);
   };
@@ -134,18 +124,161 @@ export function HistoricalLog() {
     fetchHistoricalData();
   }, []);
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short'
-    });
-  };
+  // Removed unused formatDate helper
 
   const formatGDP = (value: number) => {
     if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
     if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
     if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     return `$${value.toLocaleString()}`;
+  };
+
+  const getActiveHistory = () => {
+    const data = (() => {
+      switch (activeTab) {
+        case 'inflation': return historicalData.inflation;
+        case 'gdp': return historicalData.gdp;
+        default: return [];
+      }
+    })();
+    
+    // Filter by time period
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - timePeriod;
+    return data.filter((item: HistoricalDataPoint) => parseInt(item.year) >= startYear);
+  };
+
+  const getActiveColor = () => {
+    switch (activeTab) {
+      case 'inflation': return '#fbbf24'; // yellow-400
+      case 'gdp': return '#4ade80'; // green-400
+      default: return '#ffffff';
+    }
+  };
+
+  const getActiveLabel = () => {
+    switch (activeTab) {
+      case 'inflation': return 'Inflation Rate (%)';
+      case 'gdp': return 'Global GDP ($)';
+      default: return '';
+    }
+  };
+
+  const renderChart = () => {
+    const data = getActiveHistory();
+    if (data.length === 0) return null;
+
+    const chartData = {
+      labels: data.map(d => d.year),
+      datasets: [
+        {
+          label: activeTab === 'gdp' ? 'Global GDP' : 'Global Inflation',
+          data: data.map(d => d.value),
+          borderColor: activeTab === 'gdp' ? '#10B981' : '#F59E0B',
+          backgroundColor: activeTab === 'gdp' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+          borderWidth: 3,
+          pointBackgroundColor: activeTab === 'gdp' ? '#10B981' : '#F59E0B',
+          pointBorderColor: 'white',
+          pointBorderWidth: 2,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          tension: 0.4,
+          fill: false,
+          yAxisID: 'y'
+        }
+      ]
+    };
+
+    const options: ChartOptions<'line'> = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 200, // Animación súper rápida
+        easing: 'easeInOutQuart'
+      },
+      interaction: {
+        mode: 'index' as const,
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.9)',
+          titleColor: 'white',
+          bodyColor: 'white',
+          borderColor: activeTab === 'gdp' ? '#10B981' : '#F59E0B',
+          borderWidth: 1,
+          cornerRadius: 4,
+          displayColors: false,
+          callbacks: {
+            label: function(context) {
+              const value = context.parsed.y;
+              return activeTab === 'gdp' 
+                ? `GDP: ${formatGDP(value)}`
+                : `Inflation: ${value.toFixed(2)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          display: true,
+          title: {
+            display: true,
+            text: 'Year',
+            color: 'rgba(255,255,255,0.8)',
+            font: {
+              size: 12
+            }
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.1)'
+          },
+          ticks: {
+            color: 'rgba(255,255,255,0.6)',
+            font: {
+              size: 11
+            }
+          }
+        },
+        y: {
+          type: 'linear' as const,
+          display: true,
+          position: 'left' as const,
+          title: {
+            display: true,
+            text: activeTab === 'gdp' ? 'GDP (USD)' : 'Inflation (%)',
+            color: 'rgba(255,255,255,0.8)',
+            font: {
+              size: 12
+            }
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.1)'
+          },
+          ticks: {
+            color: 'rgba(255,255,255,0.6)',
+            font: {
+              size: 11
+            },
+            callback: function(value) {
+              if (activeTab === 'gdp') {
+                return formatGDP(Number(value));
+              }
+              return `${value}%`;
+            }
+          }
+        }
+      }
+    };
+
+    return (
+      <div className="h-80 w-full">
+        <Line data={chartData} options={options} />
+      </div>
+    );
   };
 
   const getChangeIndicator = (current: number, previous: number) => {
@@ -160,36 +293,34 @@ export function HistoricalLog() {
     };
   };
 
-  const getActiveHistory = () => {
-    switch (activeTab) {
-      case 'inflation': return historicalData.inflation;
-      case 'gdp': return historicalData.gdp;
-      case 'tariff': return historicalData.tariff;
-      default: return [];
-    }
-  };
-
-  const getActiveColor = () => {
-    switch (activeTab) {
-      case 'inflation': return 'text-yellow-400';
-      case 'gdp': return 'text-green-400';
-      case 'tariff': return 'text-blue-400';
-      default: return 'text-white';
-    }
-  };
-
-  // Reset showAll when tab changes
-  const handleTabChange = (tab: 'inflation' | 'gdp' | 'tariff') => {
-    setActiveTab(tab);
-    setShowAll(false);
-  };
-
   const activeHistory = getActiveHistory();
   const activeColor = getActiveColor();
 
   return (
-    <div>
-      <h2 className="text-xl md:text-2xl font-semibold mb-6 text-center text-white">📜 Historical Changes</h2>
+    <div className="relative">
+      {/* Info Icon */}
+      <div className="absolute top-0 right-0 z-10">
+        <div className="group relative">
+          <button className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+          </button>
+          
+          {/* Info Tooltip */}
+          <div className="absolute top-10 right-0 w-80 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg shadow-2xl p-4 text-sm text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+            <div className="space-y-2">
+              <p className="font-medium text-white mb-2">📊 Chart Features:</p>
+              <p>• Interactive chart with hover details for each data point</p>
+              <p>• Real historical data from World Bank APIs (2004-2024)</p>
+              <p>• Global averages for inflation and GDP</p>
+              <p>• Summary statistics and period-over-period changes</p>
+              <p>• Data is fetched live from official sources</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       
       {/* Tab Navigation */}
       <div className="flex justify-center mb-6">
@@ -200,7 +331,7 @@ export function HistoricalLog() {
                 ? 'bg-yellow-500 text-black font-bold' 
                 : 'text-gray-300 hover:text-white'
             }`}
-            onClick={() => handleTabChange('inflation')}
+            onClick={() => setActiveTab('inflation')}
           >
             📈 Inflation
           </button>
@@ -210,67 +341,47 @@ export function HistoricalLog() {
                 ? 'bg-green-500 text-black font-bold' 
                 : 'text-gray-300 hover:text-white'
             }`}
-            onClick={() => handleTabChange('gdp')}
+            onClick={() => setActiveTab('gdp')}
           >
             💰 GDP
           </button>
-          <button
-            className={`px-4 py-2 rounded-lg transition-all duration-200 ${
-              activeTab === 'tariff' 
-                ? 'bg-blue-500 text-black font-bold' 
-                : 'text-gray-300 hover:text-white'
-            }`}
-            onClick={() => handleTabChange('tariff')}
-          >
-            🏛️ Tariff
-          </button>
+
         </div>
       </div>
 
-      {/* Content based on active tab */}
-      <div className="space-y-4">
+      {/* Time Period Buttons */}
+      <div className="flex justify-center mb-6">
+        <div className="bg-white/10 rounded-xl p-1 flex">
+          {([5, 10, 15, 20] as const).map((period) => (
+            <button
+              key={period}
+              className={`px-3 py-2 rounded-lg transition-all duration-200 text-sm ${
+                timePeriod === period 
+                  ? 'bg-white/20 text-white font-bold' 
+                  : 'text-gray-300 hover:text-white'
+              }`}
+              onClick={() => setTimePeriod(period)}
+            >
+              {period} Years
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="mb-6">
         {loading ? (
           <div className="text-center py-8">
             <div className="text-gray-300 text-lg">Loading historical data...</div>
             <div className="mt-4 text-gray-400">Fetching data from World Bank APIs</div>
           </div>
         ) : activeHistory.length > 0 ? (
-          <div className="space-y-3">
-            {(showAll ? activeHistory : activeHistory.slice(0, 3)).map((entry, idx) => {
-              const change = idx > 0 ? getChangeIndicator(entry.value, activeHistory[idx - 1].value) : null;
-              
-              return (
-                <div key={entry.date} className="p-4 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-200">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-white font-medium">{formatDate(entry.date)}</span>
-                    <span className={`font-bold ${activeColor}`}>
-                      {activeTab === 'gdp' ? formatGDP(entry.value) : `${entry.value.toFixed(2)}%`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm text-gray-300">
-                    <span>Global {activeTab === 'gdp' ? 'GDP' : activeTab === 'inflation' ? 'Inflation' : 'Tariff'}</span>
-                    {change && (
-                      <span className={`flex items-center gap-1 ${
-                        change.isPositive ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                        {change.isPositive ? '↗' : '↘'} {change.percentage.toFixed(2)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            
-            {activeHistory.length > 3 && (
-              <div className="text-center pt-4">
-                <button
-                  onClick={() => setShowAll(!showAll)}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 text-white font-medium transition-all duration-200 hover:scale-105"
-                >
-                  {showAll ? 'Show Less' : `Show More (${activeHistory.length - 3} more)`}
-                </button>
-              </div>
-            )}
+          <div>
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold text-white mb-2">{getActiveLabel()}</h3>
+              <p className="text-gray-400 text-sm">Last {timePeriod} years • Hover over points for details</p>
+            </div>
+            {renderChart()}
           </div>
         ) : (
           <div className="text-center py-8">
@@ -282,16 +393,49 @@ export function HistoricalLog() {
         )}
       </div>
 
-      {/* Info about what this shows */}
-      <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
-        <h3 className="text-base font-semibold text-gray-300 mb-2">ℹ️ What this shows:</h3>
-        <div className="text-sm text-gray-400 space-y-1">
-          <p>• Real historical data from World Bank APIs (2004-2024)</p>
-          <p>• Global averages for inflation, GDP, and tariff rates</p>
-          <p>• Year-over-year percentage changes</p>
-          <p>• Data is fetched live from official sources</p>
+      {/* Summary Statistics */}
+      {activeHistory.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-gray-400 text-sm">Current Value</div>
+            <div className={`text-xl font-bold ${activeColor}`}>
+              {activeTab === 'gdp' ? formatGDP(activeHistory[activeHistory.length - 1].value) : `${activeHistory[activeHistory.length - 1].value.toFixed(2)}%`}
+            </div>
+            <div className="text-gray-500 text-xs">{activeHistory[activeHistory.length - 1].year}</div>
+          </div>
+          
+          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-gray-400 text-sm">Average</div>
+            <div className={`text-xl font-bold ${activeColor}`}>
+              {(() => {
+                const avg = activeHistory.reduce((sum, item) => sum + item.value, 0) / activeHistory.length;
+                return activeTab === 'gdp' ? formatGDP(avg) : `${avg.toFixed(2)}%`;
+              })()}
+            </div>
+            <div className="text-gray-500 text-xs">Last {timePeriod} years</div>
+          </div>
+          
+          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-gray-400 text-sm">Change</div>
+            <div className={`text-xl font-bold ${
+              (() => {
+                if (activeHistory.length < 2) return 'text-gray-400';
+                const change = getChangeIndicator(activeHistory[activeHistory.length - 1].value, activeHistory[0].value);
+                return change?.isPositive ? 'text-green-400' : 'text-red-400';
+              })()
+            }`}>
+              {(() => {
+                if (activeHistory.length < 2) return 'N/A';
+                const change = getChangeIndicator(activeHistory[activeHistory.length - 1].value, activeHistory[0].value);
+                if (!change) return 'N/A';
+                return `${change.isPositive ? '+' : ''}${change.percentage.toFixed(1)}%`;
+              })()}
+            </div>
+            <div className="text-gray-500 text-xs">vs {activeHistory[0].year}</div>
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 } 

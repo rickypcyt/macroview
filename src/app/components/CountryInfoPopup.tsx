@@ -249,7 +249,7 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
             populationCache[queryKey] = population;
             setPopulationInStorage(queryKey, population);
           } else {
-            setApiError("No disponible en API externa");
+            setApiError("Not found in API");
             setPopulationYear(null);
           }
         })
@@ -273,7 +273,7 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
     const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
     if (!countryName || typeof countryName !== 'string') {
       setApiGDP(null);
-      setGDPError("No disponible");
+      setGDPError("Not available");
       setLoadingGDP(false);
       return;
     }
@@ -350,13 +350,13 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
               gdpCache[countryName] = gdp;
               setGDPInStorage(countryName, gdp);
             } else {
-              setGDPError("No disponible en API externa");
+              setGDPError("Not found in API");
               setGdpYear(null);
             }
           });
       })
       .catch(() => {
-        setGDPError("No disponible en API externa");
+        setGDPError("Not found in API");
         setGdpYear(null);
       })
       .finally(() => setLoadingGDP(false));
@@ -372,7 +372,7 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
     const iso2 = country.properties?.ISO_A2 || country.properties?.iso_a2 || country.properties?.iso2 || country.id;
     const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
     if (!countryName || typeof countryName !== 'string') {
-      setInflationError("No disponible");
+      setInflationError("Not available");
       setLoadingInflation(false);
       return;
     }
@@ -434,13 +434,13 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
               inflationCache[countryName] = inflation;
               setInflationInStorage(countryName, inflation);
             } else {
-              setInflationError("No disponible en API externa");
+              setInflationError("Not found in API");
               setInflationYear(null);
             }
           });
       })
       .catch(() => {
-        setInflationError("No disponible en API externa");
+        setInflationError("Not found in API");
         setInflationYear(null);
       })
       .finally(() => setLoadingInflation(false));
@@ -454,7 +454,7 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
     setTariffYear(null);
     const iso3 = country.properties?.ISO_A3 || country.properties?.iso_a3 || country.properties?.iso3;
     if (!iso3 || typeof iso3 !== 'string') {
-      setTariffError("No disponible");
+      setTariffError("Not available");
       setLoadingTariff(false);
       setTariffYear(null);
       return;
@@ -505,12 +505,12 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
           setTariffError(null);
           setTariffYear(year);
         } else {
-          setTariffError("No disponible en API externa");
+          setTariffError("Not found in API");
           setTariffYear(null);
         }
       })
       .catch(() => {
-        setTariffError("No disponible en API externa");
+        setTariffError("Not found in API");
         setTariffYear(null);
       })
       .finally(() => setLoadingTariff(false));

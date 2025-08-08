@@ -15,6 +15,7 @@ interface Globe3DProps {
   normalizeCountryName: (name: string) => string;
   onContinentClick: (name: string) => void;
   gdpByCountry: Record<string, number>;
+  loadGDPForCountry: (countryName: string) => Promise<void>;
 }
 
 function hasCoordinates(geometry: GeoJSON.Geometry): geometry is GeoJSON.Polygon | GeoJSON.MultiPolygon {
@@ -51,7 +52,7 @@ function ContinentStatsModal({ continent, onClose, countriesCount }: { continent
   );
 }
 
-export function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick, gdpByCountry }: Globe3DProps) {
+export function Globe3D({ countries, popByCountry, normalizeCountryName, onContinentClick, gdpByCountry, loadGDPForCountry }: Globe3DProps) {
   const [selectedCountry, setSelectedCountry] = useState<GeoJSON.Feature | null>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,15 +123,29 @@ export function Globe3D({ countries, popByCountry, normalizeCountryName, onConti
   const allLabelsData = [...continentLabelsData, ...countryLabelsData];
 
   // Handler para click en país (funciona con o sin labels visibles)
-  function handlePolygonClick(country: GeoJSON.Feature, event?: MouseEvent) {
-    setSelectedCountry(country);
-    if (event && 'clientX' in event && 'clientY' in event) {
-      setPopupPos({ x: event.clientX, y: event.clientY });
-    } else if (globeRef.current && country && country.geometry && hasCoordinates(country.geometry)) {
-      const centroid = getCentroid((country.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon).coordinates);
-      const coords = globeRef.current.getScreenCoords(centroid[1], centroid[0]);
-      setPopupPos({ x: coords.x, y: coords.y });
-    }
+  function handlePolygonClick(country: GeoJSON.Feature) {
+    const handleCountryClick = async (country: GeoJSON.Feature) => {
+      const countryName = country.properties?.name || '';
+      
+      // Cargar datos de GDP si no están disponibles
+      if (countryName && gdpByCountry[countryName] === undefined) {
+        await loadGDPForCountry(countryName);
+      }
+      
+      setSelectedCountry(country);
+      
+      // Calcular posición del popup basado en el centroide del país
+      if (country.geometry && hasCoordinates(country.geometry)) {
+        const coords = country.geometry.coordinates;
+        const [lng, lat] = getCentroid(coords);
+        
+        if (globeRef.current) {
+          const { x, y } = globeRef.current.pointOfView({ lat, lng, altitude: 0.1 });
+          setPopupPos({ x, y });
+        }
+      }
+    };
+    handleCountryClick(country);
   }
 
   // Colores por continente
@@ -158,7 +173,7 @@ export function Globe3D({ countries, popByCountry, normalizeCountryName, onConti
         atmosphereAltitude={0.01}
         showAtmosphere={false}
         animateIn={false}
-        onPolygonClick={(country, event) => handlePolygonClick(country as GeoJSON.Feature, event as MouseEvent)}
+        onPolygonClick={(country) => handlePolygonClick(country as GeoJSON.Feature)}
         onZoom={handleCameraChange}
         onGlobeReady={handleCameraChange}
         labelsData={allLabelsData as GlobeLabel[]}
@@ -219,7 +234,7 @@ export function Globe3D({ countries, popByCountry, normalizeCountryName, onConti
           </div>
         ))}
       </div>
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Fuente de países: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Source of countries: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
     </div>
   );
 } 

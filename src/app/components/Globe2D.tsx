@@ -13,6 +13,7 @@ interface Globe2DProps {
   popByCountry: Record<string, number>;
   normalizeCountryName: (name: string) => string;
   gdpByCountry: Record<string, number>;
+  loadGDPForCountry: (countryName: string) => Promise<void>;
 }
 
 function hasCoordinates(geometry: GeoJSON.Geometry): geometry is GeoJSON.Polygon | GeoJSON.MultiPolygon {
@@ -135,7 +136,7 @@ function MapZoomListener({ setZoom }: { setZoom: (z: number) => void }) {
   return null;
 }
 
-export function Globe2D({ geojson, popByCountry, normalizeCountryName, gdpByCountry }: Globe2DProps) {
+export function Globe2D({ geojson, popByCountry, normalizeCountryName, gdpByCountry, loadGDPForCountry }: Globe2DProps) {
   const [zoom, setZoom] = useState(2);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
@@ -170,7 +171,14 @@ export function Globe2D({ geojson, popByCountry, normalizeCountryName, gdpByCoun
           (layer as L.Path).setStyle({ weight: 1, color: "#222" });
         }
       },
-      click: (e: L.LeafletMouseEvent) => {
+      click: async (e: L.LeafletMouseEvent) => {
+        const countryName = feature.properties?.name || '';
+        
+        // Cargar datos de GDP si no están disponibles
+        if (countryName && gdpByCountry[countryName] === undefined) {
+          await loadGDPForCountry(countryName);
+        }
+        
         setSelectedCountry(feature);
         if (e.originalEvent) {
           setPopupPos({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
@@ -245,7 +253,7 @@ export function Globe2D({ geojson, popByCountry, normalizeCountryName, gdpByCoun
           gdpByCountry={gdpByCountry}
         />
       )}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Fuente de países: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-sm text-gray-600 mt-2 z-[1000]">Source of countries: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
     </div>
   );
 } 
