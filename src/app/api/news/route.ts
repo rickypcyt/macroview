@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+// Ensure we run on the Node.js runtime so standard environment variables are available
+export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,6 +17,12 @@ export async function GET(request: Request) {
 
   const apiKey = process.env.NEWS_API_KEY;
   if (!apiKey) {
+    // In production, fail gracefully to avoid breaking the UI
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('NewsAPI key is not configured in production. Returning empty results.');
+      return NextResponse.json({ articles: [] }, { status: 200 });
+    }
+    // In development, surface the misconfiguration
     console.error('NewsAPI key is not configured');
     return NextResponse.json(
       { error: 'Server configuration error' },

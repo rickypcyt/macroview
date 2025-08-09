@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Global Financial Dashboard",
   description: "Real-time economic indicators and global financial data",
+  applicationName: "MyWebSite",
+  appleWebApp: {
+    title: "MyWebSite",
+  },
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -40,7 +44,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <meta name="apple-mobile-web-app-title" content="MyWebSite" />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}
       >
