@@ -6,7 +6,7 @@ import { loadCountriesGeoJSON, loadCountryGDP, loadPopulationData } from "./util
 import { useCallback, useEffect, useState } from "react";
 
 import { Dashboard } from "./components/Dashboard";
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 import { Globe2D } from "./components/Globe2D";
 import { Globe3D } from "./components/Globe3D";
 import { logError } from "./utils/errorHandler";

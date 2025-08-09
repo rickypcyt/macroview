@@ -1,6 +1,6 @@
 "use client";
 
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 import React from "react";
 
 // Cache en memoria para inflación

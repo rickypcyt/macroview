@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { formatInflationWord, formatLargeNumber, formatTariffWord } from "../utils/helpers";
 
-import { GeoJSON } from "geojson";
-
+import type * as GeoJSON from "geojson";
+// Local type alias used throughout this file when referring to World Bank country metadata
 type WorldBankCountry = { id: string; name: string };
 
 // Cache en memoria para poblaciones obtenidas por API

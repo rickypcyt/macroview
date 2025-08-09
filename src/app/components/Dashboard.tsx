@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 
 import { CountrySearch } from "./CountrySearch";
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
 import { NewsSection } from "./NewsSection";
 import { getCachedGlobalGDP } from "../utils/worldBankApi";
@@ -431,6 +431,8 @@ export function Dashboard({
               loadGDPForCountry={loadGDPForCountry}
               loadInflationForCountry={loadInflationForCountry}
               loadTariffForCountry={loadTariffForCountry}
+              gdpSourceLabel="World Bank (NY.GDP.MKTP.CD)"
+              populationSourceLabel="CountriesNow API"
             />
           </div>
         </div>

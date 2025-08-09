@@ -4,7 +4,7 @@ import { CONTINENTS_EN, CONTINENT_COLORS, CONTINENT_NAME_MAP, COUNTRIES_PER_CONT
 import React, { useRef, useState } from "react";
 
 import { CountryInfoPopup } from "./CountryInfoPopup";
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 import GlobeImport from "react-globe.gl";
 
 type GlobeLabel = { lat: number; lng: number; text: string; isCountry?: boolean; isContinent?: boolean; bgColor?: string; color?: string; size?: number; };

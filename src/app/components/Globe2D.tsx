@@ -6,7 +6,7 @@ import React, { useEffect, useState } from "react";
 
 import { CONTINENTS_EN } from "../utils/helpers";
 import { CountryInfoPopup } from "./CountryInfoPopup";
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 
 interface Globe2DProps {
   geojson: GeoJSON.FeatureCollection;

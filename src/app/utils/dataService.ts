@@ -1,4 +1,4 @@
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 import { APIError, handleAPIError, logError, withRetry } from "./errorHandler";
 
 // Types

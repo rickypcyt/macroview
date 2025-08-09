@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 
-import { GeoJSON } from "geojson";
+import type * as GeoJSON from "geojson";
 
 interface CountrySearchProps {
   countries: GeoJSON.Feature[];
@@ -13,9 +13,12 @@ interface CountrySearchProps {
   loadGDPForCountry: (countryName: string) => Promise<void>;
   loadInflationForCountry?: (countryName: string) => Promise<number | null>;
   loadTariffForCountry?: (countryName: string) => Promise<number | null>;
+  // Optional source labels to display in the dropdown
+  gdpSourceLabel?: string;
+  populationSourceLabel?: string;
 }
 
-export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry }: CountrySearchProps) {
+export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry, gdpSourceLabel, populationSourceLabel }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -134,6 +137,13 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffC
                       {gdp && <span className="text-green-400 text-sm font-medium">💰 GDP: ${gdp.toLocaleString()}</span>}
                       {inflation !== undefined && <span className="text-yellow-400 text-sm font-medium">📈 Inflation: {inflation.toFixed(2)}%</span>}
                       {tariff !== undefined && <span className="text-blue-400 text-sm font-medium">🏛️ Tariff: {tariff.toFixed(2)}%</span>}
+                      {(gdp || populationSourceLabel) && (
+                        <span className="text-[10px] text-gray-300 mt-1">
+                          {gdp && gdpSourceLabel ? `Source (GDP): ${gdpSourceLabel}` : null}
+                          {gdp && gdpSourceLabel && populationSourceLabel ? ' • ' : null}
+                          {populationSourceLabel ? `Source (Population): ${populationSourceLabel}` : null}
+                        </span>
+                      )}
                     </span>
                   </li>
                 );
