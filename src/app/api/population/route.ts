@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ population: null, year: null, historical_population: [] }, { status: 200 });
       }
       console.error('API_NINJAS_KEY is not configured');
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+      return NextResponse.json({ error: 'No API KEY found' }, { status: 500 });
     }
 
     const url = `https://api.api-ninjas.com/v1/population?country=${encodeURIComponent(country)}`;

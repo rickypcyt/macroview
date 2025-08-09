@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     // In development, surface the misconfiguration
     console.error('NewsAPI key is not configured');
     return NextResponse.json(
-      { error: 'Server configuration error' },
+      { error: 'No API KEY found' },
       { status: 500 }
     );
   }
