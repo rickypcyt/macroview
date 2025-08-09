@@ -175,8 +175,8 @@ export function Dashboard({
 
           const highestVal = Math.max(...inflationValues);
           const lowestVal = Math.min(...inflationValues);
-          const highest = { country: 'Highest (WB sample)', value: highestVal };
-          const lowest = { country: 'Lowest (WB sample)', value: lowestVal };
+          const highest = { country: 'Highest', value: highestVal };
+          const lowest = { country: 'Lowest', value: lowestVal };
 
           const distributionData = inflationValues.slice(0, 100).map((v, idx) => ({ countryName: `#${idx+1}`, inflation: v }));
 
