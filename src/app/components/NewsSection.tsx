@@ -173,6 +173,11 @@ export function NewsSection() {
             {!category.loading && !category.error && category.news.length === 0 && (
               <div className="text-center py-4">
                 <div className="text-gray-400 text-sm">No {category.name} news available</div>
+                {process.env.NODE_ENV === 'production' && (
+                  <div className="text-[11px] text-gray-500 mt-1">
+                    Hint: If this persists, verify NEWS_API_KEY is set in Vercel and redeploy.
+                  </div>
+                )}
               </div>
             )}
           </div>
