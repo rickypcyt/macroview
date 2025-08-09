@@ -425,6 +425,7 @@ export function Dashboard({
             <CountrySearch 
               countries={countries} 
               gdpByCountry={gdpByCountry} 
+              popByCountry={popByCountry}
               inflationCache={inflationCache} 
               tariffCache={tariffCache}
               onCountryClick={setSelectedCountryFromSearch}
@@ -465,6 +466,7 @@ export function Dashboard({
                       ? `$${gdpByCountry[selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || ''].toLocaleString()}`
                       : <span className="text-gray-400">Not available</span>}
                   </div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - NY.GDP.MKTP.CD</div>
                 </div>
 
                 {/* Population */}
@@ -475,6 +477,7 @@ export function Dashboard({
                       ? popByCountry[normalizeCountryName(selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || '')].toLocaleString()
                       : <span className="text-gray-400">Not available</span>}
                   </div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">CountriesNow API</div>
                 </div>
 
                 {/* Continent */}

@@ -1,12 +1,15 @@
 "use client";
 
+import type * as GeoJSON from "geojson";
+
 import React, { useMemo, useState } from "react";
 
-import type * as GeoJSON from "geojson";
+import { normalizeCountryName } from "../utils/helpers";
 
 interface CountrySearchProps {
   countries: GeoJSON.Feature[];
   gdpByCountry: Record<string, number>;
+  popByCountry: Record<string, number>;
   inflationCache: Record<string, number>;
   tariffCache: Record<string, number>;
   onCountryClick: (country: GeoJSON.Feature) => void;
@@ -18,7 +21,7 @@ interface CountrySearchProps {
   populationSourceLabel?: string;
 }
 
-export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry, gdpSourceLabel, populationSourceLabel }: CountrySearchProps) {
+export function CountrySearch({ countries, gdpByCountry, popByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry, gdpSourceLabel: _gdpSourceLabel, populationSourceLabel: _populationSourceLabel }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -120,9 +123,7 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffC
             <ul>
               {filtered.map((c, idx) => {
                 const name = c.properties?.name || c.properties?.NAME || c.id || '';
-                const gdp = gdpByCountry[name];
-                const inflation = inflationCache[name];
-                const tariff = tariffCache[name];
+                const population = popByCountry[normalizeCountryName(name)];
                 return (
                   <li
                     key={name + idx}
@@ -134,15 +135,8 @@ export function CountrySearch({ countries, gdpByCountry, inflationCache, tariffC
                   >
                     <span className="font-medium text-white text-lg">{name}</span>
                     <span className="flex flex-col items-end gap-1">
-                      {gdp && <span className="text-green-400 text-sm font-medium">💰 GDP: ${gdp.toLocaleString()}</span>}
-                      {inflation !== undefined && <span className="text-yellow-400 text-sm font-medium">📈 Inflation: {inflation.toFixed(2)}%</span>}
-                      {tariff !== undefined && <span className="text-blue-400 text-sm font-medium">🏛️ Tariff: {tariff.toFixed(2)}%</span>}
-                      {(gdp || populationSourceLabel) && (
-                        <span className="text-[10px] text-gray-300 mt-1">
-                          {gdp && gdpSourceLabel ? `Source (GDP): ${gdpSourceLabel}` : null}
-                          {gdp && gdpSourceLabel && populationSourceLabel ? ' • ' : null}
-                          {populationSourceLabel ? `Source (Population): ${populationSourceLabel}` : null}
-                        </span>
+                      {population !== undefined && (
+                        <span className="text-blue-400 text-sm font-medium"> Population: {population.toLocaleString()}</span>
                       )}
                     </span>
                   </li>
