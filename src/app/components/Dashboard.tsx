@@ -7,12 +7,13 @@ import { GeoJSON } from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
 import { NewsSection } from "./NewsSection";
 import { getCachedGlobalGDP } from "../utils/worldBankApi";
+import { getCachedGlobalWEO_GDP, getIFSInflationLatest, getCachedGlobalWEO_Inflation } from "../utils/imfApi";
 import { normalizeCountryName } from "../utils/helpers";
 
 // Inflación cache en memoria
-  const inflationCache: Record<string, number> = {};
-  // Tariff cache en memoria
-  const tariffCache: Record<string, number> = {};
+const inflationCache: Record<string, number> = {};
+// Tariff cache en memoria
+const tariffCache: Record<string, number> = {};
 
 function getTariffMapFromStorage(): Record<string, number> | null {
   try {
@@ -60,11 +61,27 @@ export function Dashboard({
     const fetchGlobalGDP = async () => {
       try {
         setGlobalGDP(prev => ({ ...prev, loading: true, error: null }));
-        const result = await getCachedGlobalGDP();
+        // Try IMF WEO first
+        try {
+          const imfRes = await getCachedGlobalWEO_GDP();
+          setGlobalGDP({
+            value: imfRes.value,
+            year: imfRes.year,
+            source: imfRes.source,
+            loading: false,
+            error: null
+          });
+          return;
+        } catch (imfErr) {
+          console.warn('Falling back to World Bank GDP due to IMF error:', imfErr);
+        }
+
+        // Fallback to World Bank cached GDP
+        const wbRes = await getCachedGlobalGDP();
         setGlobalGDP({
-          value: result.value,
-          year: result.year,
-          source: result.source,
+          value: wbRes.value,
+          year: wbRes.year,
+          source: wbRes.source,
           loading: false,
           error: null
         });
@@ -130,38 +147,55 @@ export function Dashboard({
 
   // (Tariff stats removed from global section to avoid unused state)
 
-  // Función para cargar datos de inflación globales
+  // Función para cargar datos de inflación globales (IMF-first para promedio global, WB para distribución/altos/bajos)
   async function loadGlobalInflationData() {
     setGlobalInflationStats(prev => ({ ...prev, loading: true }));
     try {
-      // Usar World Bank API para inflación global (FP.CPI.TOTL.ZG - Inflation, consumer prices)
+      let imfAverage: number | null = null;
+      try {
+        const imf = await getCachedGlobalWEO_Inflation();
+        imfAverage = imf.value;
+      } catch (e) {
+        console.warn('IMF global inflation average failed, will rely on WB for average:', e);
+      }
+
+      // Usar World Bank API para distribución y extremos (FP.CPI.TOTL.ZG - 2022)
       const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=2022');
       const data = await response.json();
-      
+
       if (Array.isArray(data) && Array.isArray(data[1])) {
         interface WbIndicatorItem { value: number | null }
         const inflationValues = (data[1] as WbIndicatorItem[])
-          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > -50 && (item.value as number) < 100)
-          .map((item: WbIndicatorItem) => item.value as number);
-        
+          .map(item => (item && typeof item.value === 'number') ? item.value : null)
+          .filter((v): v is number => v !== null);
+
         if (inflationValues.length > 0) {
-          const average = inflationValues.reduce((sum, val) => sum + val, 0) / inflationValues.length;
+          const averageWB = inflationValues.reduce((sum, val) => sum + val, 0) / inflationValues.length;
+          const average = imfAverage != null ? imfAverage : averageWB;
+
+          const highestVal = Math.max(...inflationValues);
+          const lowestVal = Math.min(...inflationValues);
+          const highest = { country: 'Highest (WB sample)', value: highestVal };
+          const lowest = { country: 'Lowest (WB sample)', value: lowestVal };
+
+          const distributionData = inflationValues.slice(0, 100).map((v, idx) => ({ countryName: `#${idx+1}`, inflation: v }));
+
           setGlobalInflationStats({
             average,
-            highest: null,
-            lowest: null,
-            distributionData: [],
+            highest,
+            lowest,
+            distributionData,
             loading: false,
             error: null
           });
         } else {
           setGlobalInflationStats({
-            average: null,
+            average: imfAverage,
             highest: null,
             lowest: null,
             distributionData: [],
             loading: false,
-            error: 'No inflation data available'
+            error: imfAverage == null ? 'No inflation data available' : null
           });
         }
       }
@@ -195,27 +229,30 @@ export function Dashboard({
 
       type WbCountry = { id?: string; name?: string };
       const wbCountries = data[1] as WbCountry[];
-      let found = wbCountries.find((c) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
-      if (!found) {
-        // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
-        const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
-        found = wbCountries.find((c) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
-      }
-
+      const found = wbCountries.find(c => c.name && normalizeCountryName(c.name) === normalizeCountryName(countryName));
       if (!found || !found.id) {
         return null;
       }
+      // Use IMF IFS CPI inflation (PCPIPCH). World Bank list gives ISO2 in id, which IMF expects.
+      const imfInfl = await getIFSInflationLatest(found.id);
+      if (imfInfl !== null && !Number.isNaN(imfInfl)) {
+        inflationCache[countryName] = imfInfl;
+        return imfInfl;
+      }
 
-      // Obtener datos de inflación
-      const inflationResponse = await fetch(
-        `https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
-      );
-      const inflationData = await inflationResponse.json();
-      
-      if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
-        const inflation = inflationData[1][0].value;
-        inflationCache[countryName] = inflation;
-        return inflation;
+      // Fallback: World Bank CPI inflation (FP.CPI.TOTL.ZG)
+      try {
+        const inflationResponse = await fetch(
+          `https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
+        );
+        const inflationData = await inflationResponse.json();
+        if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
+          const inflation = inflationData[1][0].value;
+          inflationCache[countryName] = inflation;
+          return inflation;
+        }
+      } catch (wbErr) {
+        console.warn('WB inflation fallback failed:', wbErr);
       }
 
       return null;
@@ -496,6 +533,7 @@ export function Dashboard({
                        `${selectedCountryInflation.toFixed(2)}%` : 
                        <span className="text-gray-400">Not available</span>}
                   </div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF IFS - CPI inflation (PCPIPCH); WB fallback when unavailable</div>
                 </div>
 
                 {/* Tariff */}
@@ -507,6 +545,7 @@ export function Dashboard({
                        `${selectedCountryTariff.toFixed(2)}%` : 
                        <span className="text-gray-400">Not available</span>}
                   </div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - TM.TAX.MRCH.SM.AR.ZS</div>
                 </div>
               </div>
             </div>

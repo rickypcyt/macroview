@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+
 import Fuse from 'fuse.js';
 import { toPng } from 'html-to-image';
 
@@ -13,10 +14,13 @@ interface CountryData {
   iso2: string;
   gdpGrowth?: number;
   gdpGrowthYear?: string;
+  gdpGrowthSourceLabel?: string;
   inflation?: number;
   inflationYear?: string;
+  inflationSourceLabel?: string;
   interestRate?: number;
   interestRateYear?: string;
+  interestRateSourceLabel?: string;
   unemployment?: number;
   unemploymentYear?: string;
   laborForceParticipation?: number;
@@ -50,7 +54,13 @@ const INDICATORS = [
   'Market Maturity (Factoring/ABL)'
 ];
 
+
+
 export default function ComparisonTable() {
+  // Mount flag; do not change hooks order based on it
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const [countries, setCountries] = useState<CountryData[]>([]);
   const [worldBankCountries, setWorldBankCountries] = useState<WorldBankCountry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,7 +171,7 @@ export default function ComparisonTable() {
     };
 
     try {
-      // Fetch Real GDP Growth (annual %): NY.GDP.MKTP.KD.ZG
+      // GDP Growth (annual %, latest) — World Bank: NY.GDP.MKTP.KD.ZG
       try {
         const gdpGrowthResponse = await fetch(
           `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/NY.GDP.MKTP.KD.ZG?format=json&per_page=1`
@@ -173,38 +183,49 @@ export default function ComparisonTable() {
           if (typeof value === 'number') {
             newCountry.gdpGrowth = value;
             newCountry.gdpGrowthYear = date;
+            newCountry.gdpGrowthSourceLabel = `World Bank (NY.GDP.MKTP.KD.ZG, ${date})`;
           }
         }
       } catch (error) {
-        console.error('Error fetching GDP growth:', error);
+        console.error('Error fetching GDP growth (WB):', error);
       }
 
-      // Fetch inflation data
+      // Inflation (YoY, latest) — World Bank: FP.CPI.TOTL.ZG
       try {
         const inflationResponse = await fetch(
           `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
         );
         const inflationData = await inflationResponse.json();
         if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0]) {
-          newCountry.inflation = inflationData[1][0].value;
-          newCountry.inflationYear = inflationData[1][0].date;
+          const val = inflationData[1][0].value;
+          const date = inflationData[1][0].date;
+          if (typeof val === 'number') {
+            newCountry.inflation = val;
+            newCountry.inflationYear = date;
+            newCountry.inflationSourceLabel = `World Bank (FP.CPI.TOTL.ZG, ${date})`;
+          }
         }
       } catch (error) {
-        console.error('Error fetching inflation:', error);
+        console.error('Error fetching inflation (WB):', error);
       }
 
-      // Fetch interest rate data
+      // Interest Rate (%, latest) — World Bank: FR.INR.RINR (Real interest rate)
       try {
         const interestResponse = await fetch(
           `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FR.INR.RINR?format=json&per_page=1`
         );
         const interestData = await interestResponse.json();
         if (Array.isArray(interestData) && Array.isArray(interestData[1]) && interestData[1][0]) {
-          newCountry.interestRate = interestData[1][0].value;
-          newCountry.interestRateYear = interestData[1][0].date;
+          const val = interestData[1][0].value;
+          const date = interestData[1][0].date;
+          if (typeof val === 'number') {
+            newCountry.interestRate = val;
+            newCountry.interestRateYear = date;
+            newCountry.interestRateSourceLabel = `World Bank (FR.INR.RINR, ${date})`;
+          }
         }
       } catch (error) {
-        console.error('Error fetching interest rate:', error);
+        console.error('Error fetching interest rate (WB):', error);
       }
 
       // Fetch unemployment data
@@ -351,11 +372,11 @@ export default function ComparisonTable() {
   const getIndicatorSource = (country: CountryData, indicatorIndex: number): string | null => {
     switch (indicatorIndex) {
       case 0:
-        return country.gdpGrowthYear ? `World Bank (NY.GDP.MKTP.KD.ZG, ${country.gdpGrowthYear})` : null;
+        return country.gdpGrowthSourceLabel ?? (country.gdpGrowthYear ? `World Bank (NY.GDP.MKTP.KD.ZG, ${country.gdpGrowthYear})` : null);
       case 1:
-        return country.inflationYear ? `World Bank (FP.CPI.TOTL.ZG, ${country.inflationYear})` : null;
+        return country.inflationSourceLabel ?? (country.inflationYear ? `World Bank (FP.CPI.TOTL.ZG, ${country.inflationYear})` : null);
       case 2:
-        return country.interestRateYear ? `World Bank (FR.INR.RINR, ${country.interestRateYear})` : null;
+        return country.interestRateSourceLabel ?? (country.interestRateYear ? `World Bank (FR.INR.RINR, ${country.interestRateYear})` : null);
       case 3:
         return country.unemploymentYear ? `World Bank (SL.UEM.TOTL.ZS, ${country.unemploymentYear})` : null;
       case 4:
@@ -529,10 +550,10 @@ export default function ComparisonTable() {
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
-      <div className="w-full px-24 pb-16">
-        <div className="w-full space-y-12 mt-8">
-                    {/* Header Card */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20">
+      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 pt-5 pb-5">
+        <div className="w-full">
+          {/* Toolbar Card */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20 mb-6">
             {/* Top bar like navbar */}
             <div className="flex items-center gap-3 sm:gap-4">
               {/* Left placeholder for future buttons */}
@@ -579,7 +600,7 @@ export default function ComparisonTable() {
 
           {/* Search Results Card */}
           {filteredCountries.length > 0 && (
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden pb-5">
               <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-white font-semibold text-base sm:text-lg">Search results</h2>
@@ -666,6 +687,10 @@ export default function ComparisonTable() {
           {/* Comparison Table Card */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
             <div className="overflow-x-auto">
+              {!mounted ? (
+                <div className="p-8 text-center text-gray-300">Loading…</div>
+              ) : (
+              <>
               {/* Header Row */}
               <div className="flex bg-white/5 border-b border-white/20 min-w-max">
                 <div className="flex-shrink-0 p-4 font-semibold text-white border-r border-white/20 w-[180px] text-center text-base">
@@ -707,8 +732,10 @@ export default function ComparisonTable() {
                     </div>
                   ))}
 
-                </div>
+              </div>
               ))}
+              </>
+              )}
             </div>
           </div>
 
