@@ -198,12 +198,6 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
       }
       setLoadingApi(true);
       setApiError(null);
-      const API_NINJAS_KEY = process.env.NEXT_PUBLIC_API_NINJAS_KEY;
-      if (!API_NINJAS_KEY) {
-        setApiError("API Key no configurada (.env.local)");
-        setLoadingApi(false);
-        return;
-      }
       // Mapeo especial para nombres de países para la API
       let apiCountryName = countryName;
       if (apiCountryName === "Russian Federation" || apiCountryName === "Russia" || apiCountryName === "russia" || queryValue === "RU") apiCountryName = "russia";
@@ -212,7 +206,7 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
       if (apiCountryName === "Korea, Republic of") apiCountryName = "South Korea";
       if (apiCountryName === "Korea, Democratic People's Republic of") apiCountryName = "North Korea";
       // Puedes agregar más casos especiales aquí
-      const apiUrl = `https://api.api-ninjas.com/v1/population?country=${encodeURIComponent(apiCountryName)}`;
+      const apiUrl = `/api/population?country=${encodeURIComponent(apiCountryName)}`;
       console.log({
         countryName,
         iso2,
@@ -220,11 +214,8 @@ export function CountryInfoPopup({ country, position, onClose, popByCountry, nor
         queryValue,
         apiCountryName,
         apiUrl,
-        API_NINJAS_KEY: API_NINJAS_KEY ? '***' : undefined
       });
-      fetch(apiUrl, {
-        headers: { 'X-Api-Key': API_NINJAS_KEY }
-      })
+      fetch(apiUrl)
         .then(res => {
           console.log('API response status:', res.status, res.statusText);
           if (!res.ok) throw new Error("Could not obtain population");
