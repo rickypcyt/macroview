@@ -13,7 +13,6 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { getGlobalWEOInflationHistory, getGlobalWEONGDPDHistory } from '../utils/imfApi';
 
 ChartJS.register(
   CategoryScale,
@@ -52,80 +51,64 @@ export function HistoricalLog() {
     setLoading(true);
     
     try {
-      // IMF-first: historical inflation data (last ~25 years to cover UI)
+      // World Bank only: historical inflation data (last ~25 years)
       const currentYear = new Date().getFullYear();
       const startYear = currentYear - 24;
-      try {
-        const rows = await getGlobalWEOInflationHistory(startYear, currentYear);
-        const inflationHistory = rows.map(r => ({ date: `${r.year}-01-01`, value: r.value, year: r.year }));
-        setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
-        setSources(prev => ({ ...prev, inflation: 'IMF WEO (PCPIPCH)' }));
-      } catch {
-        // Fallback to World Bank average across countries
-        const inflationResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=${startYear}:${currentYear}`);
-        const inflationData = await inflationResponse.json();
-        if (inflationData && inflationData[1]) {
-          const inflationByYear: Record<string, { total: number; count: number }> = {};
-          inflationData[1].forEach((item: { value?: number; date?: string }) => {
-            if (item.value != null && item.date) {
-              const year = item.date;
-              if (!inflationByYear[year]) {
-                inflationByYear[year] = { total: 0, count: 0 };
-              }
-              inflationByYear[year].total += item.value as number;
-              inflationByYear[year].count += 1;
+      const inflationResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=${startYear}:${currentYear}`);
+      const inflationData = await inflationResponse.json();
+      if (inflationData && inflationData[1]) {
+        const inflationByYear: Record<string, { total: number; count: number }> = {};
+        inflationData[1].forEach((item: { value?: number; date?: string }) => {
+          if (item.value != null && item.date) {
+            const year = item.date;
+            if (!inflationByYear[year]) {
+              inflationByYear[year] = { total: 0, count: 0 };
             }
-          });
-          const inflationHistory = Object.entries(inflationByYear)
-            .map(([year, data]) => ({
-              date: `${year}-01-01`,
-              value: data.count ? data.total / data.count : 0,
-              year
-            }))
-            .sort((a, b) => parseInt(a.year) - parseInt(b.year));
-          setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
-          setSources(prev => ({ ...prev, inflation: 'World Bank (FP.CPI.TOTL.ZG)' }));
-        }
+            inflationByYear[year].total += item.value as number;
+            inflationByYear[year].count += 1;
+          }
+        });
+        const inflationHistory = Object.entries(inflationByYear)
+          .map(([year, data]) => ({
+            date: `${year}-01-01`,
+            value: data.count ? data.total / data.count : 0,
+            year
+          }))
+          .sort((a, b) => parseInt(a.year) - parseInt(b.year));
+        setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
+        setSources(prev => ({ ...prev, inflation: 'World Bank (FP.CPI.TOTL.ZG)' }));
       }
     } catch {
       console.log('Failed to fetch historical inflation data');
     }
     
     try {
-      // IMF-first: historical global nominal GDP (NGDPD, USD)
+      // World Bank only: historical global nominal GDP (NY.GDP.MKTP.CD, USD)
       const currentYear2 = new Date().getFullYear();
       const startYear2 = currentYear2 - 24;
-      try {
-        const rows = await getGlobalWEONGDPDHistory(startYear2, currentYear2);
-        const gdpHistory = rows.map(r => ({ date: `${r.year}-01-01`, value: r.value, year: r.year }));
-        setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
-        setSources(prev => ({ ...prev, gdp: 'IMF WEO (NGDPD, USD)' }));
-      } catch {
-        // Fallback to World Bank: sum across countries
-        const gdpResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=200&date=${startYear2}:${currentYear2}`);
-        const gdpData = await gdpResponse.json();
-        if (gdpData && gdpData[1]) {
-          const gdpByYear: Record<string, { total: number; count: number }> = {};
-          gdpData[1].forEach((item: { value?: number; date?: string }) => {
-            if (item.value != null && item.date) {
-              const year = item.date;
-              if (!gdpByYear[year]) {
-                gdpByYear[year] = { total: 0, count: 0 };
-              }
-              gdpByYear[year].total += item.value as number;
-              gdpByYear[year].count += 1;
+      const gdpResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=200&date=${startYear2}:${currentYear2}`);
+      const gdpData = await gdpResponse.json();
+      if (gdpData && gdpData[1]) {
+        const gdpByYear: Record<string, { total: number; count: number }> = {};
+        gdpData[1].forEach((item: { value?: number; date?: string }) => {
+          if (item.value != null && item.date) {
+            const year = item.date;
+            if (!gdpByYear[year]) {
+              gdpByYear[year] = { total: 0, count: 0 };
             }
-          });
-          const gdpHistory = Object.entries(gdpByYear)
-            .map(([year, data]) => ({
-              date: `${year}-01-01`,
-              value: data.total,
-              year
-            }))
-            .sort((a, b) => parseInt(a.year) - parseInt(b.year));
-          setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
-          setSources(prev => ({ ...prev, gdp: 'World Bank (NY.GDP.MKTP.CD)' }));
-        }
+            gdpByYear[year].total += item.value as number;
+            gdpByYear[year].count += 1;
+          }
+        });
+        const gdpHistory = Object.entries(gdpByYear)
+          .map(([year, data]) => ({
+            date: `${year}-01-01`,
+            value: data.total,
+            year
+          }))
+          .sort((a, b) => parseInt(a.year) - parseInt(b.year));
+        setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
+        setSources(prev => ({ ...prev, gdp: 'World Bank (NY.GDP.MKTP.CD)' }));
       }
     } catch {
       console.log('Failed to fetch historical GDP data');
