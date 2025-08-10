@@ -59,7 +59,7 @@ export function SelectedCountryCard({
                   ? `$${gdpByCountry[nameKey].toLocaleString()}`
                   : <span className="text-gray-400">Not available</span>}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - NY.GDP.MKTP.CD</div>
+              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF WEO - NGDPD (USD)</div>
             </div>
 
             {/* Population */}

@@ -432,7 +432,7 @@ export function Dashboard({
         loadGDPForCountry={loadGDPForCountry}
         loadInflationForCountry={loadInflationForCountry}
         loadTariffForCountry={loadTariffForCountry}
-        gdpSourceLabel="World Bank (NY.GDP.MKTP.CD)"
+        gdpSourceLabel="IMF (WEO NGDPD)"
         populationSourceLabel="CountriesNow API"
       />
 

@@ -385,3 +385,32 @@ export async function getWEOGDPGrowthLatest(iso2: string): Promise<{ value: numb
   }
   return { value: null, year: null };
 }
+
+// Get latest nominal GDP (NGDPD) in USD from IMF WEO for a given ISO2 code.
+// WEO NGDPD is reported in billions of USD; convert to absolute USD by multiplying by 1e9.
+export async function getWEONGDPDLatestUSDWithYear(iso2: string): Promise<{ value: number | null; year: string | null }> {
+  if (!iso2 || iso2.length < 2) return { value: null, year: null };
+  // Primary: DataMapper (ISO3 required)
+  try {
+    const iso3 = await iso2ToIso3(iso2);
+    if (iso3) {
+      const dm = await getDMIndicatorLatest('NGDPD', iso3);
+      if (dm.value != null) {
+        return { value: dm.value * 1e9, year: dm.year };
+      }
+    }
+  } catch {}
+  // Fallback: SDMX WEO
+  try {
+    const url = buildSDMXUrl(`WEO/A.${iso2.toUpperCase()}.NGDPD`);
+    const { data } = await getWithRetry(url, 1);
+    const series = data?.CompactData?.DataSet?.Series;
+    const firstSeries = Array.isArray(series) ? series[0] : series;
+    const { time, value } = getFirstObs(firstSeries);
+    const v = value != null ? Number(value) * 1e9 : null;
+    if (v != null) return { value: v, year: time ?? null };
+  } catch (err) {
+    console.error(`IMF WEO NGDPD (SDMX fallback) failed for ${iso2}:`, err);
+  }
+  return { value: null, year: null };
+}

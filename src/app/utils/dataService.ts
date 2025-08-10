@@ -1,5 +1,6 @@
 import type * as GeoJSON from "geojson";
 import { APIError, handleAPIError, logError, withRetry } from "./errorHandler";
+import { getWEONGDPDLatestUSDWithYear } from "./imfApi";
 
 // Types
 export type WorldBankCountry = { id: string; name: string };
@@ -112,35 +113,16 @@ export const loadCountryGDP = async (countryName: string): Promise<number | null
       logError(`Country ISO2 not found for: ${countryName}`, 'loadCountryGDP');
       return null;
     }
-
-    // Fetch GDP data
-    const response = await withRetry(async () => {
-      const res = await fetch(
-        `https://api.worldbank.org/v2/country/${iso2}/indicator/NY.GDP.MKTP.CD?format=json&per_page=1`
-      );
-      if (!res.ok) {
-        throw new Response(res.statusText, { status: res.status });
-      }
-      return res;
-    });
-
-    const gdpData = await response.json();
-    
-    if (
-      Array.isArray(gdpData) && 
-      Array.isArray(gdpData[1]) && 
-      gdpData[1][0] && 
-      typeof gdpData[1][0].value === 'number'
-    ) {
-      const gdp = gdpData[1][0].value;
-      gdpCache[countryName] = gdp;
-      setGDPInStorage(countryName, gdp);
-      return gdp;
+    // Fetch GDP from IMF WEO (NGDPD) as USD (converted from billions)
+    const { value } = await getWEONGDPDLatestUSDWithYear(iso2);
+    if (value != null) {
+      gdpCache[countryName] = value;
+      setGDPInStorage(countryName, value);
+      return value;
     }
-
     return null;
   } catch (error) {
-    const apiError = handleAPIError(error, `worldbank/gdp/${countryName}`);
+    const apiError = handleAPIError(error, `imf/weo/ngdpd/${countryName}`);
     logError(apiError, `loadCountryGDP:${countryName}`);
     return null;
   }
