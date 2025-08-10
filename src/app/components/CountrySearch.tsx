@@ -21,7 +21,7 @@ interface CountrySearchProps {
   populationSourceLabel?: string;
 }
 
-export function CountrySearch({ countries, gdpByCountry, popByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry, gdpSourceLabel: _gdpSourceLabel, populationSourceLabel: _populationSourceLabel }: CountrySearchProps) {
+export function CountrySearch({ countries, gdpByCountry, popByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);

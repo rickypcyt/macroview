@@ -2,12 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 
-import { CountrySearch } from "./CountrySearch";
 import type * as GeoJSON from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
 import { NewsSection } from "./NewsSection";
 import { getCachedGlobalGDP } from "../utils/worldBankApi";
 import { normalizeCountryName } from "../utils/helpers";
+import { SearchCard } from "./SearchCard";
+import { SelectedCountryCard } from "./SelectedCountryCard";
+import { GlobalStatsSidebar } from "./GlobalStatsSidebar";
+import { DataSourcesCard } from "./DataSourcesCard";
 
 // Inflación cache en memoria
 const inflationCache: Record<string, number> = {};
@@ -419,105 +422,31 @@ export function Dashboard({
       </div>
 
       {/* Search Card */}
-      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-2 md:mb-4 lg:mb-4">
-        <div className="w-full">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
-            <CountrySearch 
-              countries={countries} 
-              gdpByCountry={gdpByCountry} 
-              popByCountry={popByCountry}
-              inflationCache={inflationCache} 
-              tariffCache={tariffCache}
-              onCountryClick={setSelectedCountryFromSearch}
-              loadGDPForCountry={loadGDPForCountry}
-              loadInflationForCountry={loadInflationForCountry}
-              loadTariffForCountry={loadTariffForCountry}
-              gdpSourceLabel="World Bank (NY.GDP.MKTP.CD)"
-              populationSourceLabel="CountriesNow API"
-            />
-          </div>
-        </div>
-      </div>
+      <SearchCard
+        countries={countries}
+        gdpByCountry={gdpByCountry}
+        popByCountry={popByCountry}
+        inflationCache={inflationCache}
+        tariffCache={tariffCache}
+        onCountryClick={setSelectedCountryFromSearch}
+        loadGDPForCountry={loadGDPForCountry}
+        loadInflationForCountry={loadInflationForCountry}
+        loadTariffForCountry={loadTariffForCountry}
+        gdpSourceLabel="World Bank (NY.GDP.MKTP.CD)"
+        populationSourceLabel="CountriesNow API"
+      />
 
       {/* Selected Country Info Card */}
       {selectedCountryFromSearch && (
-        <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-8 md:mb-10 lg:mb-12">
-          <div className="w-full">
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white">
-                  {selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id}
-                </h2>
-                <button
-                  className="text-white text-lg sm:text-xl font-bold hover:text-green-400 focus:outline-none transition-colors"
-                  onClick={() => setSelectedCountryFromSearch(null)}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
-                {/* GDP */}
-                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">💰 GDP (USD)</div>
-                  <div className="text-base sm:text-lg md:text-xl font-bold text-green-400">
-                    {gdpByCountry[selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || ''] 
-                      ? `$${gdpByCountry[selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || ''].toLocaleString()}`
-                      : <span className="text-gray-400">Not available</span>}
-                  </div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - NY.GDP.MKTP.CD</div>
-                </div>
-
-                {/* Population */}
-                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">👥 Population</div>
-                  <div className="text-base sm:text-lg md:text-xl font-bold text-blue-400">
-                    {popByCountry[normalizeCountryName(selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || '')]
-                      ? popByCountry[normalizeCountryName(selectedCountryFromSearch.properties?.name || selectedCountryFromSearch.properties?.NAME || selectedCountryFromSearch.id || '')].toLocaleString()
-                      : <span className="text-gray-400">Not available</span>}
-                  </div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">CountriesNow API</div>
-                </div>
-
-                {/* Continent */}
-                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">🌍 Continent</div>
-                  <div className="text-base sm:text-lg md:text-xl font-bold text-purple-400">
-                    {selectedCountryFromSearch.properties?.continent || <span className="text-gray-400">Not available</span>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional Info Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {/* Inflation */}
-                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">📈 Inflation (%)</div>
-                  <div className="text-base sm:text-lg md:text-xl font-bold text-yellow-400">
-                    {selectedCountryLoading ? 'Loading...' :
-                     selectedCountryInflation !== null ? 
-                       `${selectedCountryInflation.toFixed(2)}%` : 
-                       <span className="text-gray-400">Not available</span>}
-                  </div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF IFS - CPI inflation (PCPIPCH); WB fallback when unavailable</div>
-                </div>
-
-                {/* Tariff */}
-                <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
-                  <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">🏛️ Applied Average Tariff (%)</div>
-                  <div className="text-base sm:text-lg md:text-xl font-bold text-blue-400">
-                    {selectedCountryLoading ? 'Loading...' :
-                     selectedCountryTariff !== null ? 
-                       `${selectedCountryTariff.toFixed(2)}%` : 
-                       <span className="text-gray-400">Not available</span>}
-                  </div>
-                  <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - TM.TAX.MRCH.SM.AR.ZS</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SelectedCountryCard
+          selectedCountryFromSearch={selectedCountryFromSearch}
+          setSelectedCountryFromSearch={setSelectedCountryFromSearch}
+          gdpByCountry={gdpByCountry}
+          popByCountry={popByCountry}
+          selectedCountryInflation={selectedCountryInflation}
+          selectedCountryTariff={selectedCountryTariff}
+          selectedCountryLoading={selectedCountryLoading}
+        />
       )}
 
       {/* Main Dashboard Grid */}
@@ -532,103 +461,13 @@ export function Dashboard({
               </div>
             </div>
 
-            {/* Global Stats Cards - Stack vertically on mobile, 2x2 grid on md, vertical sidebar on lg+ */}
-            <div className="w-full lg:w-80 flex flex-col gap-3 sm:gap-6 h-full md:grid md:grid-cols-2 md:gap-4 md:auto-rows-fr lg:flex">
-              {/* GDP Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
-                <div className="text-center">
-                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">💰</div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">
-                    Global GDP (USD{globalGDP.year ? `, ${globalGDP.year}` : ''})
-                  </div>
-                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-green-400">
-                    {globalGDP.loading 
-                      ? 'Loading...' 
-                      : globalGDP.error 
-                        ? 'Error loading data' 
-                        : `$${(globalGDP.value! / 1e12).toFixed(2)}T`
-                    }
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
-                    {globalGDP.source || 'Loading source...'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Inflation Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
-                <div className="text-center">
-                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">📈</div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Inflation (%)</div>
-                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-yellow-400">
-                    {globalInflationStats.loading ? 'Loading...' :
-                     globalInflationStats.error ? 'Error' :
-                     globalInflationStats.average !== null ? 
-                       `${globalInflationStats.average.toFixed(2)}%` : 
-                       'Not available'}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
-                    World Bank - Consumer Price Index (2022)
-                  </div>
-                  {globalInflationStats.distributionData.length > 0 && (
-                    <div className="text-xs text-gray-400 mt-1 sm:mt-2">
-                      Based on {globalInflationStats.distributionData.length} countries
-                    </div>
-                  )}
-                  {globalInflationStats.error && (
-                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
-                      {globalInflationStats.error}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Trade Flows Card */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
-                <div className="text-center">
-                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">🌐</div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global Trade Flows (%)</div>
-                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-purple-400">
-                    {globalTradeStats.loading ? 'Loading...' :
-                     globalTradeStats.error ? 'Error' :
-                     globalTradeStats.value !== null ? 
-                       `${globalTradeStats.value.toFixed(1)}%` : 
-                       'Not available'}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
-                    World Bank - Trade as % of GDP (2021)
-                  </div>
-                  {globalTradeStats.error && (
-                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
-                      {globalTradeStats.error}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Empty Card for Balance */}
-              <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 flex-1 flex flex-col">
-                <div className="text-center">
-                  <div className="text-lg sm:text-xl mb-1 sm:mb-2">🏦</div>
-                  <div className="text-xs sm:text-sm font-medium text-gray-300 mb-1 sm:mb-2">Global External Debt</div>
-                  <div className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-red-400">
-                    {globalDebtStats.loading ? 'Loading...' :
-                     globalDebtStats.error ? 'Error' :
-                     globalDebtStats.value !== null ? 
-                       `$${(globalDebtStats.value / 1e12).toFixed(2)}T` : 
-                       'Not available'}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1 sm:mt-2">
-                    World Bank - External Debt Stocks (2021)
-                  </div>
-                  {globalDebtStats.error && (
-                    <div className="text-xs text-red-400 mt-1 sm:mt-2">
-                      {globalDebtStats.error}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            {/* Global Stats Cards - moved to sidebar component */}
+            <GlobalStatsSidebar
+              globalGDP={globalGDP}
+              globalInflationStats={globalInflationStats}
+              globalTradeStats={globalTradeStats}
+              globalDebtStats={globalDebtStats}
+            />
           </div>
           
           {/* Detailed Inflation Statistics removed per user request */}
@@ -638,66 +477,8 @@ export function Dashboard({
             <NewsSection />
           </div>
 
-          {/* Data Sources Card - Responsive layout */}
-      <div className="w-full ">
-        <div className="w-full mx-auto">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <span className="text-2xl">📊</span>
-              <h2 className="text-xl font-semibold text-white">Data Sources</h2>
-            </div>
-            <p className="text-sm text-gray-400 text-center mb-6">Explore our trusted data providers</p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* World Bank Card */}
-              <a 
-                href="https://data.worldbank.org/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="text-2xl mb-2">🌍</div>
-                  <h3 className="font-medium text-gray-200">World Bank</h3>
-                  <p className="text-xs text-gray-400 mt-1">Open Data</p>
-                </div>
-              </a>
-              
-              {/* IMF Card */}
-              <a 
-                href="https://www.imf.org/en/Data" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="text-2xl mb-2">📈</div>
-                  <h3 className="font-medium text-gray-200">IMF</h3>
-                  <p className="text-xs text-gray-400 mt-1">World Economic Outlook</p>
-                </div>
-              </a>
-              
-              {/* NewsAPI Card */}
-              <a 
-                href="https://newsapi.org/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="text-2xl mb-2">📰</div>
-                  <h3 className="font-medium text-gray-200">NewsAPI</h3>
-                  <p className="text-xs text-gray-400 mt-1">News Headlines</p>
-                </div>
-              </a>
-            </div>
-            
-            <div className="mt-6 text-center">
-              <p className="text-xs text-gray-400">Data is cached for performance and may be delayed</p>
-            </div>
-          </div>
-        </div>
-      </div>
+          {/* Data Sources Card */}
+          <DataSourcesCard />
 
         </div>
       </div>

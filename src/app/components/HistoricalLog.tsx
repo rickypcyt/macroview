@@ -377,11 +377,11 @@ export function HistoricalLog() {
             <div className="text-center mb-4">
               <h3 className="text-lg font-semibold text-white mb-2">{getActiveLabel()}</h3>
               <p className="text-gray-400 text-sm">Last {timePeriod} years • Hover over points for details</p>
-              <p className="text-gray-500 text-xs mt-1">
-                Source: {activeTab === 'inflation' ? (sources.inflation ?? 'Unknown') : (sources.gdp ?? 'Unknown')}
-              </p>
             </div>
             {renderChart()}
+            <p className="text-gray-500 text-xs mt-2 text-center">
+              Source: {activeTab === 'inflation' ? 'World Bank (FP.CPI.TOTL.ZG)' : (sources.gdp ?? 'World Bank (NY.GDP.MKTP.CD)')}
+            </p>
           </div>
         ) : (
           <div className="text-center py-8">
