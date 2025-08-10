@@ -6,6 +6,7 @@ import type * as GeoJSON from "geojson";
 import { HistoricalLog } from "./HistoricalLog";
 import { NewsSection } from "./NewsSection";
 import { getCachedGlobalGDP } from "../utils/worldBankApi";
+import { getGFS_TradeTaxesProxyLatestPercent } from "../utils/imfApi";
 import { normalizeCountryName } from "../utils/helpers";
 import { SearchCard } from "./SearchCard";
 import { SelectedCountryCard } from "./SelectedCountryCard";
@@ -16,6 +17,8 @@ import { DataSourcesCard } from "./DataSourcesCard";
 const inflationCache: Record<string, number> = {};
 // Tariff cache en memoria
 const tariffCache: Record<string, number> = {};
+// Track tariff data source by country
+const tariffSourceByCountry: Record<string, 'IMF_GFS' | 'WB' | undefined> = {};
 
 function getTariffMapFromStorage(): Record<string, number> | null {
   try {
@@ -105,6 +108,7 @@ export function Dashboard({
   const [selectedCountryInflation, setSelectedCountryInflation] = useState<number | null>(null);
   const [selectedCountryTariff, setSelectedCountryTariff] = useState<number | null>(null);
   const [selectedCountryLoading, setSelectedCountryLoading] = useState(false);
+  const [selectedCountryTariffSource, setSelectedCountryTariffSource] = useState<string | null>(null);
 
   // Global trade flows stats
   const [globalTradeStats, setGlobalTradeStats] = useState<{
@@ -191,49 +195,6 @@ export function Dashboard({
     }
 
     try {
-    // Buscar el país en World Bank
-    const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
-    const data = await response.json();
-    
-    if (!Array.isArray(data) || !Array.isArray(data[1])) {
-      return null;
-    }
-
-    type WbCountry = { id?: string; name?: string };
-    const wbCountries = data[1] as WbCountry[];
-    const found = wbCountries.find(c => c.name && normalizeCountryName(c.name) === normalizeCountryName(countryName));
-    if (!found || !found.id) {
-      return null;
-    }
-    // World Bank CPI inflation (FP.CPI.TOTL.ZG)
-    try {
-      const inflationResponse = await fetch(
-        `https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
-      );
-      const inflationData = await inflationResponse.json();
-      if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
-        const inflation = inflationData[1][0].value;
-        inflationCache[countryName] = inflation;
-        return inflation;
-      }
-    } catch (wbErr) {
-      console.warn('WB inflation fetch failed:', wbErr);
-    }
-
-    return null;
-    } catch (error) {
-      console.error('Error loading inflation for', countryName, error);
-      return null;
-    }
-  }
-
-  // Función para cargar aranceles de un país
-  async function loadTariffForCountry(countryName: string) {
-    if (tariffCache[countryName] !== undefined) {
-      return tariffCache[countryName];
-    }
-
-    try {
       // Buscar el país en World Bank
       const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
       const data = await response.json();
@@ -244,27 +205,80 @@ export function Dashboard({
 
       type WbCountry = { id?: string; name?: string };
       const wbCountries = data[1] as WbCountry[];
-      let found = wbCountries.find((c) => c.name && c.name.toLowerCase() === countryName.toLowerCase());
-      if (!found) {
-        // Buscar por nombre normalizado (sin espacios, minúsculas, etc)
-        const normalized = countryName.toLowerCase().replace(/[^a-z]/g, "");
-        found = wbCountries.find((c) => c.name && c.name.toLowerCase().replace(/[^a-z]/g, "") === normalized);
+      const found = wbCountries.find(c => c.name && normalizeCountryName(c.name) === normalizeCountryName(countryName));
+      if (!found || !found.id) {
+        return null;
+      }
+      // World Bank CPI inflation (FP.CPI.TOTL.ZG)
+      try {
+        const inflationResponse = await fetch(
+          `https://api.worldbank.org/v2/country/${found.id}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
+        );
+        const inflationData = await inflationResponse.json();
+        if (Array.isArray(inflationData) && Array.isArray(inflationData[1]) && inflationData[1][0] && typeof inflationData[1][0].value === 'number') {
+          const inflation = inflationData[1][0].value;
+          inflationCache[countryName] = inflation;
+          return inflation;
+        }
+      } catch (wbErr) {
+        console.warn('WB inflation fetch failed:', wbErr);
       }
 
+      return null;
+    } catch (error) {
+      console.error('Error loading inflation for', countryName, error);
+      return null;
+    }
+  }
+
+  // Función para cargar tarifa de un país (IMF GFS proxy preferido; fallback a World Bank)
+  async function loadTariffForCountry(countryName: string) {
+    if (tariffCache[countryName] !== undefined) {
+      return tariffCache[countryName];
+    }
+
+    try {
+      // Buscar el país en World Bank para obtener el código (ISO2)
+      const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
+      const data = await response.json();
+
+      if (!Array.isArray(data) || !Array.isArray(data[1])) {
+        return null;
+      }
+
+      type WbCountry = { id?: string; name?: string };
+      const wbCountries = data[1] as WbCountry[];
+      const found = wbCountries.find(c => c.name && normalizeCountryName(c.name) === normalizeCountryName(countryName));
       if (!found || !found.id) {
         return null;
       }
 
-      // Obtener datos de aranceles (Applied Average Tariff)
-      const tariffResponse = await fetch(
-        `https://api.worldbank.org/v2/country/${found.id}/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=1`
-      );
-      const tariffData = await tariffResponse.json();
-      
-      if (Array.isArray(tariffData) && Array.isArray(tariffData[1]) && tariffData[1][0] && typeof tariffData[1][0].value === 'number') {
-        const tariff = tariffData[1][0].value;
-        tariffCache[countryName] = tariff;
-        return tariff;
+      // Prefer: IMF GFS proxy - Taxes on international trade (% of GDP)
+      try {
+        const imfProxy = await getGFS_TradeTaxesProxyLatestPercent(found.id);
+        if (imfProxy && imfProxy.value !== null && !isNaN(imfProxy.value)) {
+          tariffCache[countryName] = imfProxy.value;
+          tariffSourceByCountry[countryName] = 'IMF_GFS';
+          return imfProxy.value;
+        }
+      } catch (e) {
+        console.warn('IMF GFS proxy fetch failed:', e);
+      }
+
+      // Fallback: World Bank Applied Average Tariff (%), TM.TAX.MRCH.SM.AR.ZS
+      try {
+        const tariffResponse = await fetch(
+          `https://api.worldbank.org/v2/country/${found.id}/indicator/TM.TAX.MRCH.SM.AR.ZS?format=json&per_page=1`
+        );
+        const tariffData = await tariffResponse.json();
+        if (Array.isArray(tariffData) && Array.isArray(tariffData[1]) && tariffData[1][0] && typeof tariffData[1][0].value === 'number') {
+          const tariff = tariffData[1][0].value;
+          tariffCache[countryName] = tariff;
+          tariffSourceByCountry[countryName] = 'WB';
+          return tariff;
+        }
+      } catch (e) {
+        console.warn('WB tariff fetch failed:', e);
       }
 
       return null;
@@ -274,9 +288,8 @@ export function Dashboard({
     }
   }
 
-  // Función para cargar datos del país seleccionado
-  const loadSelectedCountryData = React.useCallback(async (country: GeoJSON.Feature) => {
-    const countryName = country.properties?.name || country.properties?.NAME || country.id;
+  // Función para cargar datos de un país seleccionado (por nombre normalizado)
+  async function loadSelectedCountryData(countryName: string) {
     if (!countryName) return;
 
     setSelectedCountryLoading(true);
@@ -295,22 +308,41 @@ export function Dashboard({
     }
     
     // Cargar tarifa
-    const tariffMap = getTariffMapFromStorage();
-    if (tariffMap && tariffMap[countryName] !== undefined && tariffMap[countryName] !== null && !isNaN(tariffMap[countryName])) {
-      setSelectedCountryTariff(tariffMap[countryName]);
-    } else {
+    try {
+      let tariff = tariffCache[countryName];
+      if (tariff === undefined || tariff === null || isNaN(tariff)) {
+        tariff = await loadTariffForCountry(countryName);
+      }
+      if (tariff !== null && tariff !== undefined && !isNaN(tariff)) {
+        setSelectedCountryTariff(tariff);
+        const src = tariffSourceByCountry[countryName] ?? null;
+        setSelectedCountryTariffSource(src);
+      } else {
+        setSelectedCountryTariff(null);
+        setSelectedCountryTariffSource(null);
+      }
+    } catch (e) {
+      console.warn('Tariff load failed for', countryName, e);
       setSelectedCountryTariff(null);
+      setSelectedCountryTariffSource(null);
     }
     
     setSelectedCountryLoading(false);
-  }, []);
+  }
 
   // Cargar datos cuando cambie el país seleccionado
   useEffect(() => {
     if (selectedCountryFromSearch) {
-      loadSelectedCountryData(selectedCountryFromSearch);
+      const props = (selectedCountryFromSearch.properties ?? {}) as { name?: unknown; NAME?: unknown };
+      const nameKey =
+        (typeof props.name === 'string' && props.name) ||
+        (typeof props.NAME === 'string' && props.NAME) ||
+        (selectedCountryFromSearch.id != null ? String(selectedCountryFromSearch.id) : "");
+      if (nameKey) {
+        loadSelectedCountryData(nameKey);
+      }
     }
-  }, [selectedCountryFromSearch, loadSelectedCountryData]);
+  }, [selectedCountryFromSearch]);
 
   // Función para cargar datos de flujos comerciales globales
   async function loadGlobalTradeData() {
@@ -412,7 +444,7 @@ export function Dashboard({
         <div className="w-full">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
             <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-2 sm:mb-3 md:mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              🌐 Global Financial Dashboard
+              🌐 Global macroeconomic overview
             </h1>
             <p className="text-gray-300 text-center text-sm sm:text-base md:text-lg">
               Real-time economic indicators and global financial data
@@ -445,6 +477,7 @@ export function Dashboard({
           popByCountry={popByCountry}
           selectedCountryInflation={selectedCountryInflation}
           selectedCountryTariff={selectedCountryTariff}
+          selectedCountryTariffSource={selectedCountryTariffSource}
           selectedCountryLoading={selectedCountryLoading}
         />
       )}

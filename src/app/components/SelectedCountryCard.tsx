@@ -11,6 +11,7 @@ interface SelectedCountryCardProps {
   popByCountry: Record<string, number>;
   selectedCountryInflation: number | null;
   selectedCountryTariff: number | null;
+  selectedCountryTariffSource: string | null;
   selectedCountryLoading: boolean;
 }
 
@@ -21,6 +22,7 @@ export function SelectedCountryCard({
   popByCountry,
   selectedCountryInflation,
   selectedCountryTariff,
+  selectedCountryTariffSource,
   selectedCountryLoading,
 }: SelectedCountryCardProps) {
   const props = (selectedCountryFromSearch.properties ?? {}) as {
@@ -103,7 +105,11 @@ export function SelectedCountryCard({
                   selectedCountryTariff !== null ? `${selectedCountryTariff.toFixed(2)}%` :
                   <span className="text-gray-400">Not available</span>}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">World Bank - TM.TAX.MRCH.SM.AR.ZS</div>
+              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">
+                {selectedCountryTariffSource === 'IMF_GFS'
+                  ? 'IMF GFS proxy - Trade taxes (% of GDP)'
+                  : 'World Bank - TM.TAX.MRCH.SM.AR.ZS'}
+              </div>
             </div>
           </div>
         </div>

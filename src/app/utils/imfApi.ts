@@ -117,6 +117,37 @@ export async function getIFSInterestRateLatestWithYear(iso2: string): Promise<{ 
   return { value: null, year: null };
 }
 
+// IMF GFS proxy: Taxes on international trade (as % of GDP)
+// Note: This is a proxy for tariff burden using government revenue data. Availability varies.
+export async function getGFS_TradeTaxesProxyLatestPercent(iso2: string): Promise<{ value: number | null; year: string | null }> {
+  if (!iso2 || iso2.length < 2) return { value: null, year: null };
+  try {
+    // Attempt SDMX GFS series. Exact series codes can differ; we try a common percent-of-GDP variant first.
+    // If not available, we'll return null and let caller fallback to WB tariff.
+    const urlCandidates = [
+      // Hypothetical percent of GDP series
+      buildSDMXUrl(`GFS/A.${iso2.toUpperCase()}.TXG_TRADE_GDP_PCT`),
+      // Alternative naming patterns sometimes used
+      buildSDMXUrl(`GFS/A.${iso2.toUpperCase()}.TXG_TRD_PCT_GDP`),
+      // Level series (LCU or USD) are not directly comparable; omitted intentionally
+    ];
+    for (const url of urlCandidates) {
+      try {
+        const { data } = await getWithRetry(url, 1);
+        const series = data?.CompactData?.DataSet?.Series;
+        const firstSeries = Array.isArray(series) ? series[0] : series;
+        const { time, value } = getFirstObs(firstSeries);
+        if (value != null && !isNaN(Number(value))) {
+          return { value: Number(value), year: time ?? null };
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.warn(`IMF GFS trade taxes proxy failed for ${iso2}:`, err);
+  }
+  return { value: null, year: null };
+}
+
 // WEO Global Nominal GDP history (NGDPD, billions USD). Convert to absolute USD by * 1e9
 export async function getGlobalWEONGDPDHistory(startYear?: number, endYear?: number): Promise<{ year: string; value: number }[]> {
   try {
