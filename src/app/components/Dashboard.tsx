@@ -20,14 +20,6 @@ const tariffCache: Record<string, number> = {};
 // Track tariff data source by country
 const tariffSourceByCountry: Record<string, 'IMF_GFS' | 'WB' | undefined> = {};
 
-function getTariffMapFromStorage(): Record<string, number> | null {
-  try {
-    const val = localStorage.getItem('tariffByIso3');
-    if (val) return JSON.parse(val);
-  } catch {}
-  return null;
-}
-
 interface DashboardProps {
   countries: GeoJSON.Feature[];
   geojson: GeoJSON.FeatureCollection | null;
@@ -331,6 +323,7 @@ export function Dashboard({
   }
 
   // Cargar datos cuando cambie el país seleccionado
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedCountryFromSearch) {
       const props = (selectedCountryFromSearch.properties ?? {}) as { name?: unknown; NAME?: unknown };
