@@ -1,207 +1,218 @@
 # 🌍 MacroView - Global Economic Data Visualization
+An interactive web app to explore global macro data: GDP, inflation, trade/tariffs, plus live financial news.
 
-Una aplicación web interactiva para visualizar datos económicos globales, incluyendo PIB, inflación, aranceles y noticias financieras en tiempo real.
+This README is intentionally opinionated and practical. If you’re learning, it gives you a clean path to read the code. If you already know React/Next.js, it highlights the architecture quickly so you can dive in where it matters.
 
-## ✨ Características Principales
+## ✨ Key Features
 
-### 📊 Visualización de Datos
-- **Mapa interactivo mundial** con datos económicos por país
-- **Estadísticas globales** de PIB, inflación y aranceles
-- **Gráficos dinámicos** y comparativas entre países
-- **Búsqueda avanzada** de países con autocompletado
+### 📊 Data Visualization
+- World map with per-country macro indicators
+- Global stats for GDP and inflation, with comparisons
+- Dynamic charts and country-to-country comparisons
+- Typeahead search to jump to any country
 
-### 📰 Sistema de Noticias Inteligente
-- **Caché persistente** que evita múltiples requests a la API
-- **Límite de 50 requests por día** por usuario para proteger la cuota
-- **Actualización automática** cada 24 horas
-- **Categorías organizadas**: Aranceles, Economía Mundial, Tasas de Inflación
+### 📰 Smart News System
+- Persistent caching to minimize API calls
+- Per-user daily quota enforcement (50/day by default)
+- Auto refresh every 24h per category
+- Structured categories: tariffs, global macro, inflation
 
-### 🚀 Rendimiento Optimizado
-- **Caché local** para todos los datos económicos
-- **Lazy loading** de datos por país
-- **Gestión inteligente de errores** y fallbacks
-- **Interfaz responsive** para todos los dispositivos
+### 🚀 Performance & UX
+- Local cache for macro data and news
+- Lazy loading by country/feature
+- Robust error handling and graceful fallbacks
+- Responsive UI
 
-## 🛠️ Tecnologías Utilizadas
+## 🧱 Tech Stack
 
-- **Frontend**: Next.js 14, React 18, TypeScript
-- **Estilos**: Tailwind CSS, CSS Modules
-- **Mapas**: GeoJSON, D3.js
-- **APIs**: World Bank, IMF, NewsAPI
-- **Caché**: localStorage, sistema de caché personalizado
+- Next.js 14 (App Router), React 18, TypeScript
+- Styling: Tailwind CSS (+ CSS Modules where useful)
+- Maps/graphics: GeoJSON and D3.js
+- Data providers: World Bank (historical), IMF (current/point-in-time), NewsAPI, API Ninjas (population)
+- Caching: localStorage + custom cache rules
 
-## 🚀 Instalación y Configuración
+## 🏁 Quickstart
 
-### Prerrequisitos
-- Node.js 18+ 
-- npm, yarn, pnpm o bun
+### Prereqs
+- Node.js 18+
+- A package manager: npm, yarn, pnpm, or bun
 
-### Instalación
+### Install
 
-1. **Clonar el repositorio**
+1) Clone and install
 ```bash
 git clone https://github.com/tu-usuario/macroview.git
 cd macroview
-```
-
-2. **Instalar dependencias**
-```bash
 npm install
-# o
-yarn install
-# o
-bun install
 ```
 
-3. **Configurar variables de entorno**
+2) Environment
 ```bash
 cp .env.example .env.local
 ```
-
-Editar `.env.local` y agregar:
+Then edit `.env.local` as needed:
 ```env
-# API Keys (opcionales para desarrollo)
-NEXT_PUBLIC_NEWS_API_KEY=tu_news_api_key_aqui
-NEXT_PUBLIC_API_NINJAS_KEY=tu_api_ninjas_key_aqui
+# Optional for local dev
+NEXT_PUBLIC_NEWS_API_KEY=your_news_api_key
+NEXT_PUBLIC_API_NINJAS_KEY=your_api_ninjas_key
 ```
 
-4. **Ejecutar en desarrollo**
+3) Run
 ```bash
 npm run dev
-# o
-yarn dev
-# o
-bun dev
+# open http://localhost:3000
 ```
 
-5. **Abrir en el navegador**
-```
-http://localhost:3000
-```
+## 🧭 How to Read the Code (start here → go there)
 
-## 📰 Sistema de Caché de Noticias
+If you’re new to the repo and want a fast mental model:
 
-### Características del Sistema
-- **Caché persistente**: 24 horas por categoría
-- **Control de rate limiting**: Máximo 50 requests por día
-- **Gestión inteligente**: Evita requests duplicados
-- **Fallback automático**: Usa datos expirados si la API no está disponible
+1) App entry and layout
+   - `src/app/page.tsx` — home page; wires together the main sections
+   - `src/app/layout.tsx` — global layout, fonts, providers, global CSS
 
-### Gestión del Caché
-- **Panel de control** integrado en la aplicación
-- **Estadísticas en tiempo real** de uso de la API
-- **Limpieza manual** del caché cuando sea necesario
-- **Monitoreo automático** del estado del sistema
+2) The main dashboard and UI shell
+   - `src/app/components/Dashboard.tsx` — high-level screen composition
+   - `src/app/components/Navbar.tsx` — top nav
+   - `src/app/globals.css` — Tailwind/base styles
 
-### Documentación Detallada
-Ver [docs/NEWS_CACHE_SYSTEM.md](docs/NEWS_CACHE_SYSTEM.md) para información completa sobre el sistema de caché.
+3) Map and country interaction
+   - `src/app/components/Globe2D.tsx` and `Globe3D.tsx` — map rendering
+   - `src/app/components/CountrySearch.tsx` — search + selection
+   - `src/app/components/SelectedCountryCard.tsx` and `SidePanelCountryInfo.tsx` — details
+   - `src/app/components/ComparisonTable.tsx` — country comparisons
 
-## 🧪 Pruebas
+4) Data layer and utils
+   - `src/app/utils/imfApi.ts` — IMF data helpers
+   - `src/app/utils/dataService.ts` — fetch/shape macro series (incl. World Bank)
+   - `src/app/utils/newsService.ts` — News API fetching + cache rules
+   - `src/app/utils/useNewsCache.ts` — React hook for news caching
+   - `src/app/utils/errorHandler.ts` — centralized error handling utilities
 
-### Ejecutar pruebas del sistema de caché
+5) API routes (server-side)
+   - `src/app/api/news/route.ts` — news proxy/caching boundary
+   - `src/app/api/population/route.ts` — population proxy (API Ninjas)
+   - `src/app/api/imf/*` — IMF related endpoints/utilities
+
+Skim that list top-to-bottom, opening files as you go. You’ll see how the UI reads from the data layer, and how the server routes wrap external APIs.
+
+## 🏗️ Architecture in 60 Seconds
+
+- App Router (Next.js) for file-based routing and server components where helpful
+- Client components for interactive visualizations (map, charts)
+- Utilities centralize calls to World Bank/IMF/News, with a small error and cache layer
+- API routes act as a server-side boundary for rate-limited or key’d providers
+- Caching is lightweight: category- and time-scoped, with fallbacks when providers fail
+
+### Data Flow (high-level)
+UI → utils (`dataService.ts`/`imfApi.ts`/`newsService.ts`) → external APIs (WB/IMF/News/API Ninjas)
+→ normalized shape → components render
+
+## 📰 News Cache System
+
+Key properties:
+- 24h TTL per category
+- 50 requests/day quota per user (default; adjustable)
+- Dedupes concurrent requests
+- Falls back to expired data if upstream is down
+
+Details: see `docs/NEWS_CACHE_SYSTEM.md`.
+
+## 🧪 Testing
+
+Run cache tests:
 ```bash
 node scripts/test-news-cache.js
 ```
 
-### Pruebas de desarrollo
+Dev tests:
 ```bash
 npm run test
-# o
-yarn test
 ```
 
-## 📁 Estructura del Proyecto
+## 📁 Project Structure
 
 ```
 macroview/
 ├── src/
 │   ├── app/
-│   │   ├── components/          # Componentes React
-│   │   │   ├── NewsSection.tsx  # Sección de noticias
-│   │   │   ├── NewsCacheManager.tsx # Gestor de caché
+│   │   ├── api/
+│   │   │   ├── news/route.ts
+│   │   │   └── population/route.ts
+│   │   ├── components/
+│   │   │   ├── NewsSection.tsx
+│   │   │   ├── NewsCacheManager.tsx
+│   │   │   ├── Globe2D.tsx / Globe3D.tsx
+│   │   │   ├── ComparisonTable.tsx
 │   │   │   └── ...
 │   │   ├── utils/
-│   │   │   ├── newsService.ts   # Servicio de noticias
-│   │   │   ├── useNewsCache.ts  # Hook de caché
-│   │   │   └── ...
-│   │   └── ...
+│   │   │   ├── imfApi.ts
+│   │   │   ├── dataService.ts
+│   │   │   ├── newsService.ts
+│   │   │   ├── useNewsCache.ts
+│   │   │   └── errorHandler.ts
+│   │   ├── page.tsx
+│   │   └── layout.tsx
 │   └── ...
 ├── scripts/
-│   └── test-news-cache.js       # Script de pruebas
+│   └── test-news-cache.js
 ├── docs/
-│   └── NEWS_CACHE_SYSTEM.md     # Documentación del caché
+│   └── NEWS_CACHE_SYSTEM.md
 └── ...
 ```
 
-## 🔧 Configuración Avanzada
+## 🔧 Advanced Config
 
-### Personalizar límites de caché
-Editar `src/app/utils/newsService.ts`:
-```typescript
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 horas
-const MAX_DAILY_REQUESTS = 50; // Máximo requests por día
+Cache limits in `src/app/utils/newsService.ts`:
+```ts
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_DAILY_REQUESTS = 50; // per-user daily cap
 ```
 
-### Agregar nuevas categorías de noticias
-Editar `src/app/components/NewsSection.tsx`:
-```typescript
+Add a news category in `src/app/components/NewsSection.tsx`:
+```ts
 const categories = [
-  { name: "Nueva Categoría", query: "tu query aqui", icon: "🔍" },
-  // ... otras categorías
+  { name: "Tariffs", query: "tariff OR trade policy", icon: "🚢" },
+  // ...
 ];
 ```
 
-## 🌐 APIs Utilizadas
+## 🌐 Data Providers
 
-### World Bank API
-- **PIB por país** (NY.GDP.MKTP.CD)
-- **Inflación** (FP.CPI.TOTL.ZG)
-- **Datos demográficos**
+- World Bank API — historical series (e.g., GDP: `NY.GDP.MKTP.CD`, inflation: `FP.CPI.TOTL.ZG`)
+- IMF — point-in-time/current macro stats and metadata
+- NewsAPI — finance headlines and articles
+- API Ninjas — population data
 
-### NewsAPI
-- **Noticias financieras** en tiempo real
-- **Categorización automática**
-- **Rate limiting** controlado
+## 🤝 Contributing
 
-### API Ninjas
-- **Datos de población** por país
-- **Información demográfica** adicional
+1) Fork
+2) Create a feature branch: `git checkout -b feature/awesome`
+3) Commit: `git commit -m "feat: awesome"`
+4) Push: `git push origin feature/awesome`
+5) Open a PR
 
-## 🤝 Contribuir
+## 📄 License
 
-1. Fork el proyecto
-2. Crear una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abrir un Pull Request
+MIT — see `LICENSE`.
 
-## 📄 Licencia
+## 🆘 Support
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+If you get stuck:
+1) Read `docs/NEWS_CACHE_SYSTEM.md`
+2) Run `node scripts/test-news-cache.js`
+3) Open an issue
 
-## 🆘 Soporte
+## 🚀 Deploy
 
-Si encuentras algún problema o tienes preguntas:
-
-1. Revisar la [documentación del sistema de caché](docs/NEWS_CACHE_SYSTEM.md)
-2. Ejecutar las [pruebas del sistema](scripts/test-news-cache.js)
-3. Abrir un [issue](https://github.com/tu-usuario/macroview/issues)
-
-## 🚀 Despliegue
-
-### Vercel (Recomendado)
+Vercel (recommended):
 ```bash
 npm run build
 vercel --prod
 ```
 
-### Otros proveedores
-El proyecto es compatible con cualquier proveedor que soporte Next.js:
-- Netlify
-- Railway
-- DigitalOcean App Platform
-- AWS Amplify
+Other Next.js-friendly providers: Netlify, Railway, DigitalOcean App Platform, AWS Amplify
 
 ---
 
-**Desarrollado con ❤️ para la visualización de datos económicos globales**
+Built with ❤️ to make macro data actually explorable.
