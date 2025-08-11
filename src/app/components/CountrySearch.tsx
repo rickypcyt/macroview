@@ -11,29 +11,85 @@ interface CountrySearchProps {
   gdpByCountry: Record<string, number>;
   popByCountry: Record<string, number>;
   inflationCache: Record<string, number>;
-  tariffCache: Record<string, number>;
   onCountryClick: (country: GeoJSON.Feature) => void;
   loadGDPForCountry: (countryName: string) => Promise<void>;
   loadInflationForCountry?: (countryName: string) => Promise<number | null>;
-  loadTariffForCountry?: (countryName: string) => Promise<number | null>;
   // Optional source labels to display in the dropdown
   gdpSourceLabel?: string;
   populationSourceLabel?: string;
 }
 
-export function CountrySearch({ countries, gdpByCountry, popByCountry, inflationCache, tariffCache, onCountryClick, loadGDPForCountry, loadInflationForCountry, loadTariffForCountry }: CountrySearchProps) {
+export function CountrySearch({ countries, gdpByCountry, popByCountry, inflationCache, onCountryClick, loadGDPForCountry, loadInflationForCountry }: CountrySearchProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const filtered = useMemo(() => {
     if (!query) return [];
-    const filteredCountries = countries.filter(c => {
-      const name = c.properties?.name || c.properties?.NAME || c.id || '';
-      return name.toLowerCase().includes(query.toLowerCase());
-    });
-    // Reset active index when filtered results change
+    const q = query.trim();
+    const qLower = q.toLowerCase();
+    const qUpper = q.toUpperCase();
+
+    // Build matches: prefer exact ISO2/ISO3 code hits first
+    const exactMatches: GeoJSON.Feature[] = [];
+    const partialMatches: GeoJSON.Feature[] = [];
+
+    // Common aliases mapping to ISO2
+    const aliasToIso2: Record<string, string> = {
+      'UK': 'GB', 'UNITED KINGDOM': 'GB', 'GREAT BRITAIN': 'GB',
+      'UAE': 'AE', 'UNITED ARAB EMIRATES': 'AE',
+      'SOUTH KOREA': 'KR', 'KOREA': 'KR', 'REPUBLIC OF KOREA': 'KR', 'ROK': 'KR',
+      'NORTH KOREA': 'KP',
+      'IVORY COAST': 'CI', "COTE D'IVOIRE": 'CI', 'COTE DIVOIRE': 'CI',
+      'DRC': 'CD', 'CONGO DR': 'CD', 'DEMOCRATIC REPUBLIC OF THE CONGO': 'CD',
+      'REPUBLIC OF THE CONGO': 'CG', 'CONGO-BRAZZAVILLE': 'CG',
+      'RUSSIA': 'RU', 'RUSSIAN FEDERATION': 'RU',
+      'VIETNAM': 'VN', 'VIET NAM': 'VN',
+      'SYRIA': 'SY', 'IRAN': 'IR', 'LAOS': 'LA',
+      'BOLIVIA': 'BO', 'VENEZUELA': 'VE', 'TANZANIA': 'TZ',
+      'CAPE VERDE': 'CV', 'SWAZILAND': 'SZ', 'ESWATINI': 'SZ',
+      'PALESTINE': 'PS', 'BRUNEI': 'BN', 'SLOVAKIA': 'SK',
+      'CZECH': 'CZ', 'CZECHIA': 'CZ',
+      'MYANMAR': 'MM', 'BURMA': 'MM',
+      'MACEDONIA': 'MK', 'NORTH MACEDONIA': 'MK',
+      'MOLDOVA': 'MD',
+      'HOLLAND': 'NL', 'NETHERLANDS': 'NL', 'KINGDOM OF THE NETHERLANDS': 'NL',
+      'TURKEY': 'TR', 'TÜRKIYE': 'TR', 'TURKIYE': 'TR',
+      'TIMOR-LESTE': 'TL', 'EAST TIMOR': 'TL',
+      'CABO VERDE': 'CV',
+      'BELARUS': 'BY', 'BYELORUSSIA': 'BY',
+      'UNITED STATES OF AMERICA': 'US', 'UNITED STATES': 'US', 'AMERICA': 'US',
+    };
+    const aliasIso2 = aliasToIso2[qUpper];
+
+    for (const c of countries) {
+      const props = (c.properties ?? {}) as Record<string, unknown>;
+      const name = (props.name || props.NAME || (c.id as string) || '') as string;
+      const iso2 = ((props.ISO_A2 || props.iso_a2 || props.iso2 || '') as string).toUpperCase();
+      const iso3 = ((props.ISO_A3 || props.iso_a3 || props.iso3 || '') as string).toUpperCase();
+
+      // Alias exact ISO2
+      if (aliasIso2 && iso2 === aliasIso2) {
+        exactMatches.push(c);
+        continue;
+      }
+
+      const nameMatch = name.toLowerCase().includes(qLower);
+      const iso2Match = iso2 && (iso2 === qUpper || iso2.startsWith(qUpper));
+      const iso3Match = iso3 && (iso3 === qUpper || iso3.startsWith(qUpper));
+
+      // Exact code match (length 2 or 3 and equal)
+      const isExactCode = (q.length === 2 && iso2 === qUpper) || (q.length === 3 && iso3 === qUpper);
+
+      if (isExactCode) {
+        exactMatches.push(c);
+      } else if (nameMatch || iso2Match || iso3Match) {
+        partialMatches.push(c);
+      }
+    }
+
+    const result = [...exactMatches, ...partialMatches].slice(0, 50);
     setActiveIndex(-1);
-    return filteredCountries;
+    return result;
   }, [query, countries]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -63,25 +119,27 @@ export function CountrySearch({ countries, gdpByCountry, popByCountry, inflation
 
   const handleCountryClick = async (country: GeoJSON.Feature) => {
     const countryName = country.properties?.name || country.properties?.NAME || country.id || '';
-    
-    // Load GDP data if not already loaded
-    if (!gdpByCountry[countryName]) {
-      await loadGDPForCountry(countryName);
-    }
-    
-    // Load inflation data if not already loaded and function is available
-    if (loadInflationForCountry && inflationCache[countryName] === undefined) {
-      await loadInflationForCountry(countryName);
-    }
-    
-    // Load tariff data if not already loaded and function is available
-    if (loadTariffForCountry && tariffCache[countryName] === undefined) {
-      await loadTariffForCountry(countryName);
-    }
-    
+
+    // 1) Open the card immediately so skeletons show right away
     onCountryClick(country);
     setQuery('');
     setIsFocused(false);
+
+    // 2) Start loading data in sequence (GDP -> Inflation) without blocking UI
+    try {
+      const ensureGDP = async () => {
+        if (!gdpByCountry[countryName]) {
+          await loadGDPForCountry(countryName);
+        }
+      };
+      const ensureInflation = async () => {
+        if (loadInflationForCountry && inflationCache[countryName] === undefined) {
+          await loadInflationForCountry(countryName);
+        }
+      };
+      // Chain sequentially but do not await the chain here (fire-and-forget)
+      void ensureGDP().then(() => ensureInflation()).catch(() => {});
+    } catch {}
   };
 
   return (

@@ -9,11 +9,9 @@ interface SearchCardProps {
   gdpByCountry: Record<string, number>;
   popByCountry: Record<string, number>;
   inflationCache: Record<string, number>;
-  tariffCache: Record<string, number>;
   onCountryClick: (country: GeoJSON.Feature | null) => void;
   loadGDPForCountry: (countryName: string) => Promise<void>;
   loadInflationForCountry: (countryName: string) => Promise<number | null>;
-  loadTariffForCountry: (countryName: string) => Promise<number | null>;
   gdpSourceLabel: string;
   populationSourceLabel: string;
 }
@@ -24,11 +22,9 @@ export function SearchCard(props: SearchCardProps) {
     gdpByCountry,
     popByCountry,
     inflationCache,
-    tariffCache,
     onCountryClick,
     loadGDPForCountry,
     loadInflationForCountry,
-    loadTariffForCountry,
     gdpSourceLabel,
     populationSourceLabel,
   } = props;
@@ -42,11 +38,9 @@ export function SearchCard(props: SearchCardProps) {
             gdpByCountry={gdpByCountry}
             popByCountry={popByCountry}
             inflationCache={inflationCache}
-            tariffCache={tariffCache}
             onCountryClick={onCountryClick}
             loadGDPForCountry={loadGDPForCountry}
             loadInflationForCountry={loadInflationForCountry}
-            loadTariffForCountry={loadTariffForCountry}
             gdpSourceLabel={gdpSourceLabel}
             populationSourceLabel={populationSourceLabel}
           />

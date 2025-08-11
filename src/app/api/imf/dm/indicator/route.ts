@@ -51,7 +51,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing indicator or countries' }, { status: 400 });
   }
   const countries = (countriesRaw || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean).join(',');
-  const upstream = `https://www.imf.org/external/datamapper/api/v1/${encodeURIComponent(indicator)}?countries=${encodeURIComponent(countries)}`;
+  // IMF DataMapper expects path-style parameters: /{indicator}/{countries}
+  // Example: https://www.imf.org/external/datamapper/api/v1/PCPIPCH/ECU
+  const upstream = `https://www.imf.org/external/datamapper/api/v1/${encodeURIComponent(indicator)}/${encodeURIComponent(countries)}`;
   try {
     const res = await getWithRetry(upstream, 3, 15000);
     const ctype = res.headers.get('content-type') || '';
@@ -62,44 +64,7 @@ export async function GET(request: Request) {
     const data = await res.json();
     return NextResponse.json(data, { status: 200 });
   } catch (err: unknown) {
-    // Fallback for some indicators via SDMX (transform to DM-like shape)
-    try {
-      // Only handle single country fallback for now
-      const countryList = countries.split(',');
-      if (countryList.length === 1) {
-        const iso3 = countryList[0];
-        const tryPaths: string[] = [];
-        if (indicator === 'NGDP_RPCH') {
-          // Try ISO2 guess (first 2 chars) then ISO3
-          const iso2Guess = iso3.slice(0, 2);
-          tryPaths.push(`WEO/A.${iso2Guess}.NGDP_RPCH`);
-          tryPaths.push(`WEO/A.${iso3}.NGDP_RPCH`);
-        }
-        // Add more indicator mappings here as needed
-        for (const path of tryPaths) {
-          try {
-            const sdmxRes = await getWithRetry(`https://dataservices.imf.org/REST/SDMX_JSON.svc/CompactData/${encodeURIComponent(path)}`, 2, 12000);
-            const ctype2 = sdmxRes.headers.get('content-type') || '';
-            if (!ctype2.includes('application/json')) continue;
-            const sdmx = await sdmxRes.json();
-            type SDMXObs = { ['@TIME_PERIOD']?: string; ['@OBS_VALUE']?: string | number | null };
-            type SDMXSeries = { Obs?: SDMXObs[] };
-            type SDMXResponse = { CompactData?: { DataSet?: { Series?: SDMXSeries | SDMXSeries[] } } };
-            const series: SDMXSeries | SDMXSeries[] | undefined = (sdmx as unknown as SDMXResponse)?.CompactData?.DataSet?.Series;
-            const firstSeries: SDMXSeries | undefined = Array.isArray(series) ? series[0] : series;
-            const obsArr: SDMXObs[] = firstSeries?.Obs ?? [];
-            const obj: Record<string, number> = {};
-            for (const o of obsArr) {
-              const y = o?.['@TIME_PERIOD'];
-              const v = o?.['@OBS_VALUE'];
-              if (y && v != null && !isNaN(Number(v))) obj[y] = Number(v);
-            }
-            // Transform to DM-like response
-            return NextResponse.json({ data: { [iso3]: obj } }, { status: 200 });
-          } catch {}
-        }
-      }
-    } catch {}
-    return NextResponse.json({ error: 'Failed to fetch IMF DataMapper indicator', upstream: upstream, detail: String(err) }, { status: 502 });
+    return NextResponse.json({ error: 'Failed to fetch IMF DataMapper indicator', upstream, indicator, countries, detail: String(err) }, { status: 502 });
   }
 }
+

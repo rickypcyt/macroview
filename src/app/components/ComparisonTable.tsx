@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import Fuse from 'fuse.js';
 import { toPng } from 'html-to-image';
-import { getWEOGDPGrowthLatest, getIFSInflationLatestWithYear } from '../utils/imfApi';
+import { getWEOGDPGrowthLatest, getIFSInterestRateLatestWithYear, getIMF_LURLatestWithYear, getIMF_IFS_PCPIPCHLatestWithYear } from '../utils/imfApi';
 
 // import { loadCountryGDP } from '../utils/dataService';
 
@@ -24,6 +24,7 @@ interface CountryData {
   interestRateSourceLabel?: string;
   unemployment?: number;
   unemploymentYear?: string;
+  unemploymentSourceLabel?: string;
   laborForceParticipation?: number;
   laborForceParticipationYear?: string;
   easeOfDoingBusiness?: number;
@@ -65,68 +66,201 @@ export default function ComparisonTable() {
   const [countries, setCountries] = useState<CountryData[]>([]);
   const [worldBankCountries, setWorldBankCountries] = useState<WorldBankCountry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedTerm, setDebouncedTerm] = useState('');
   const [filteredCountries, setFilteredCountries] = useState<WorldBankCountry[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [loading, setLoading] = useState(false);
+  // Global blocking overlay removed; we use per-country mini loaders
+  // Track which countries are currently fetching indicators
+  const [loadingCountries, setLoadingCountries] = useState<string[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [sortAZ, setSortAZ] = useState(true);
 
-  // Load World Bank countries list
+  // Load countries list: WB first for speed, then replace with IMF when ready
   useEffect(() => {
     const loadCountries = async () => {
       try {
-        const response = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
-        const data = await response.json();
-        if (Array.isArray(data) && Array.isArray(data[1])) {
-          interface WorldBankAPICountryRaw {
-            id: string;
-            name: string;
-            iso2Code: string;
-            region?: { value?: string };
-            incomeLevel?: { value?: string };
+        // 1) Fast WB list immediately
+        try {
+          const wbResp = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=400');
+          const wbJson = await wbResp.json();
+          if (Array.isArray(wbJson) && Array.isArray(wbJson[1])) {
+            type WbApiCountry = { id?: string; name: string; iso2Code: string; incomeLevel?: { value?: string } };
+            const wbCountries = (wbJson[1] as WbApiCountry[])
+              .filter((c) => typeof c?.name === 'string' && typeof c?.iso2Code === 'string' && c.iso2Code.length === 2)
+              .map((c) => ({ id: c.id ?? c.iso2Code, name: c.name, iso2Code: c.iso2Code, incomeLevel: c?.incomeLevel?.value }));
+            setWorldBankCountries(wbCountries);
           }
-          const validCountries = (data[1] as WorldBankAPICountryRaw[])
-            .filter((country: WorldBankAPICountryRaw) => country.region?.value !== 'Aggregates' && !!country.incomeLevel?.value)
-            .map((country: WorldBankAPICountryRaw) => ({
-              id: country.id,
-              name: country.name,
-              iso2Code: country.iso2Code,
-              incomeLevel: country.incomeLevel?.value
-            }));
-          setWorldBankCountries(validCountries);
+        } catch (wbErr) {
+          console.error('WB countries fallback failed:', wbErr);
+        }
+
+        // 2) Then try IMF endpoint and replace when the browser is idle
+        const fetchIMFWhenIdle = () => {
+          (async () => {
+            try {
+              const response = await fetch('/api/imf/countries');
+              const data = await response.json();
+              if (Array.isArray(data)) {
+                type ApiCountry = { id?: string; name: string; iso2Code: string; incomeLevel?: string };
+                const validCountries = (data as ApiCountry[])
+                  .filter((c) => typeof c.name === 'string' && typeof c.iso2Code === 'string' && c.iso2Code.length === 2)
+                  .map((c) => ({ id: c.id ?? c.iso2Code, name: c.name, iso2Code: c.iso2Code, incomeLevel: c.incomeLevel }));
+                if (validCountries.length > 0) {
+                  setWorldBankCountries(validCountries);
+                }
+              } else if (data && Array.isArray(data.items)) {
+                type ApiCountry = { id?: string; name: string; iso2Code: string; incomeLevel?: string };
+                const items = data.items as ApiCountry[];
+                const validCountries = items
+                  .filter((c) => typeof c.name === 'string' && typeof c.iso2Code === 'string' && c.iso2Code.length === 2)
+                  .map((c) => ({ id: c.id ?? c.iso2Code, name: c.name, iso2Code: c.iso2Code, incomeLevel: c.incomeLevel }));
+                if (validCountries.length > 0) {
+                  setWorldBankCountries(validCountries);
+                }
+              }
+            } catch {
+              // Ignore; already have WB list
+            }
+          })();
+        };
+        if ('requestIdleCallback' in window) {
+          const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
+          w.requestIdleCallback?.(fetchIMFWhenIdle);
+        } else {
+          setTimeout(fetchIMFWhenIdle, 0);
         }
       } catch (error) {
-        console.error('Error loading countries:', error);
+        console.error('Error loading IMF countries:', error);
       }
     };
 
     loadCountries();
   }, []);
 
+  // Debounce search input for smoother UX
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedTerm(searchTerm), 250);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
+
   // Build Fuse index when countries change
   const fuse = useMemo(() => {
     if (!worldBankCountries || worldBankCountries.length === 0) return null;
     return new Fuse(worldBankCountries, {
       keys: ['name', 'iso2Code'],
-      threshold: 0.3,
+      threshold: 0.4,
       ignoreLocation: true,
-      includeScore: true,
-      useExtendedSearch: true
+      includeScore: false,
+      minMatchCharLength: 2,
+      useExtendedSearch: false
     });
   }, [worldBankCountries]);
 
-  // Filter countries based on search term using Fuse.js
+  // Filter countries based on search term using Fuse.js, with ISO code awareness
   useEffect(() => {
-    if (searchTerm.trim() === '' || !fuse) {
+    const term = debouncedTerm.trim();
+    if (term === '' || !fuse) {
       setFilteredCountries([]);
       setSelectedIndex(-1);
       return;
     }
 
-    const results = fuse.search(searchTerm).slice(0, 10).map(r => r.item);
+    const termUpper = term.toUpperCase();
+    // Alias to ISO2 mapping
+    const aliasToIso2: Record<string, string> = {
+      'UK': 'GB', 'UNITED KINGDOM': 'GB', 'GREAT BRITAIN': 'GB',
+      'UAE': 'AE', 'UNITED ARAB EMIRATES': 'AE',
+      'SOUTH KOREA': 'KR', 'KOREA': 'KR', 'REPUBLIC OF KOREA': 'KR', 'ROK': 'KR',
+      'NORTH KOREA': 'KP',
+      'IVORY COAST': 'CI', "COTE D'IVOIRE": 'CI', 'COTE DIVOIRE': 'CI',
+      'DRC': 'CD', 'CONGO DR': 'CD', 'DEMOCRATIC REPUBLIC OF THE CONGO': 'CD',
+      'REPUBLIC OF THE CONGO': 'CG', 'CONGO-BRAZZAVILLE': 'CG',
+      'RUSSIA': 'RU', 'RUSSIAN FEDERATION': 'RU',
+      'VIETNAM': 'VN', 'VIET NAM': 'VN',
+      'SYRIA': 'SY', 'IRAN': 'IR', 'LAOS': 'LA',
+      'BOLIVIA': 'BO', 'VENEZUELA': 'VE', 'TANZANIA': 'TZ',
+      'CAPE VERDE': 'CV', 'SWAZILAND': 'SZ', 'ESWATINI': 'SZ',
+      'PALESTINE': 'PS', 'BRUNEI': 'BN', 'SLOVAKIA': 'SK',
+      'CZECH': 'CZ', 'CZECHIA': 'CZ',
+      'MYANMAR': 'MM', 'BURMA': 'MM',
+      'MACEDONIA': 'MK', 'NORTH MACEDONIA': 'MK',
+      'MOLDOVA': 'MD',
+      'HOLLAND': 'NL', 'NETHERLANDS': 'NL', 'KINGDOM OF THE NETHERLANDS': 'NL',
+      'TURKEY': 'TR', 'TÜRKIYE': 'TR', 'TURKIYE': 'TR',
+      'TIMOR-LESTE': 'TL', 'EAST TIMOR': 'TL',
+      'CABO VERDE': 'CV',
+      'BELARUS': 'BY', 'BYELORUSSIA': 'BY',
+      'UNITED STATES OF AMERICA': 'US', 'UNITED STATES': 'US', 'AMERICA': 'US',
+    };
+    const aliasIso2 = aliasToIso2[termUpper];
+    if (aliasIso2) {
+      const results = worldBankCountries.filter(c => c.iso2Code.toUpperCase() === aliasIso2);
+      if (results.length) {
+        setFilteredCountries(results.slice(0, 10));
+        setSelectedIndex(-1);
+        return;
+      }
+    }
+    // Direct ISO matches first
+    // 2-letter ISO2 exact
+    if (term.length === 2) {
+      const results = worldBankCountries.filter(c => c.iso2Code.toUpperCase() === termUpper);
+      if (results.length) {
+        setFilteredCountries(results.slice(0, 10));
+        setSelectedIndex(-1);
+        return;
+      }
+      // No exact, allow prefix
+      const pref = worldBankCountries.filter(c => c.iso2Code.toUpperCase().startsWith(termUpper)).slice(0, 10);
+      if (pref.length) {
+        setFilteredCountries(pref);
+        setSelectedIndex(-1);
+        return;
+      }
+    }
+
+    // 3-letter common aliases mapping to ISO2 (minimal set for now)
+    if (term.length === 3) {
+      const iso3ToIso2: Record<string, string> = {
+        USA: 'US',
+        GBR: 'GB',
+        FRA: 'FR',
+        DEU: 'DE',
+        ITA: 'IT',
+        ESP: 'ES',
+        CAN: 'CA',
+        MEX: 'MX',
+        BRA: 'BR',
+        CHN: 'CN',
+        IND: 'IN',
+        JPN: 'JP',
+        AUS: 'AU',
+        ARE: 'AE', // UAE
+        ZAF: 'ZA',
+        RUS: 'RU',
+      };
+      const iso2 = iso3ToIso2[termUpper];
+      if (iso2) {
+        const results = worldBankCountries.filter(c => c.iso2Code.toUpperCase() === iso2);
+        if (results.length) {
+          setFilteredCountries(results);
+          setSelectedIndex(-1);
+          return;
+        }
+      }
+    }
+
+    // Longer term: combine quick substring-on-name with Fuse fallback
+    const quickNameMatches = worldBankCountries.filter(c => c.name.toLowerCase().includes(term.toLowerCase()));
+    const fuseResults = fuse.search(term).map(r => r.item);
+
+    const dedup = new Map<string, WorldBankCountry>();
+    [...quickNameMatches, ...fuseResults].forEach(c => { dedup.set(c.iso2Code, c); });
+    const results = Array.from(dedup.values()).slice(0, 10);
+
     setFilteredCountries(results);
     setSelectedIndex(-1); // Reset selection when search changes
-  }, [searchTerm, fuse]);
+  }, [debouncedTerm, fuse, worldBankCountries]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -165,11 +299,24 @@ export default function ComparisonTable() {
       return; // Country already added
     }
 
-    setLoading(true);
-    const newCountry: CountryData = {
+    const iso2 = country.iso2Code;
+    const baseCountry: CountryData = {
       name: country.name,
-      iso2: country.iso2Code
+      iso2
     };
+
+    // Add immediately so the user sees the column and progressive updates
+    setCountries(prev => [...prev, baseCountry]);
+
+    // Mark this country as loading for per-cell skeletons
+    setLoadingCountries(prev => (prev.includes(iso2) ? prev : [...prev, iso2]));
+
+    // Helper to patch a single country by iso2
+    const patchCountry = (patch: Partial<CountryData>) => {
+      setCountries(prev => prev.map(c => c.iso2 === iso2 ? { ...c, ...patch } : c));
+    };
+
+    // Optional: UI shows per-cell loaders per indicator
 
     try {
       // Run all indicator fetches in parallel to reduce latency
@@ -178,212 +325,85 @@ export default function ComparisonTable() {
       // GDP Growth (annual %, latest) — IMF WEO: NGDP_RPCH
       tasks.push((async () => {
         try {
-          const { value, year } = await getWEOGDPGrowthLatest(country.iso2Code);
+          const { value, year } = await getWEOGDPGrowthLatest(iso2);
           if (value != null && typeof value === 'number') {
-            newCountry.gdpGrowth = value;
-            newCountry.gdpGrowthYear = year ?? undefined;
-            newCountry.gdpGrowthSourceLabel = `IMF WEO (NGDP_RPCH${year ? `, ${year}` : ''})`;
+            patchCountry({
+              gdpGrowth: value,
+              gdpGrowthYear: year ?? undefined,
+              gdpGrowthSourceLabel: `IMF WEO (NGDP_RPCH${year ? `, ${year}` : ''})`
+            });
           }
         } catch (error) {
           console.error('Error fetching GDP growth (IMF):', error);
         }
       })());
 
-      // Inflation (YoY, latest) — IMF IFS: PCPIPCH (with year) with WB fallback
+      // Inflation (YoY, latest) — IMF IFS: PCPIPCH (IMF-only)
       tasks.push((async () => {
         try {
-          const { value, year } = await getIFSInflationLatestWithYear(country.iso2Code);
+          const { value, year } = await getIMF_IFS_PCPIPCHLatestWithYear(iso2);
           if (value != null && typeof value === 'number') {
-            newCountry.inflation = value;
-            newCountry.inflationYear = year ?? undefined;
-            newCountry.inflationSourceLabel = `IMF IFS (PCPIPCH${year ? `, ${year}` : ''})`;
-          } else {
-            // Fallback to World Bank if IMF has no value
-            try {
-              const resp = await fetch(
-                `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
-              );
-              const json = await resp.json();
-              if (Array.isArray(json) && Array.isArray(json[1]) && json[1][0]) {
-                const wbVal = json[1][0].value;
-                const wbDate = json[1][0].date;
-                if (typeof wbVal === 'number') {
-                  newCountry.inflation = wbVal;
-                  newCountry.inflationYear = wbDate;
-                  newCountry.inflationSourceLabel = `World Bank (FP.CPI.TOTL.ZG, ${wbDate})`;
-                }
-              }
-            } catch (wbErr) {
-              console.error('Inflation WB fallback failed:', wbErr);
-            }
+            patchCountry({
+              inflation: value,
+              inflationYear: year ?? undefined,
+              inflationSourceLabel: `IMF IFS (PCPIPCH${year ? `, ${year}` : ''})`
+            });
           }
         } catch (error) {
-          console.error('Error fetching inflation (IMF):', error);
-          // Network/5xx fallback to WB
-          try {
-            const resp = await fetch(
-              `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1`
-            );
-            const json = await resp.json();
-            if (Array.isArray(json) && Array.isArray(json[1]) && json[1][0]) {
-              const wbVal = json[1][0].value;
-              const wbDate = json[1][0].date;
-              if (typeof wbVal === 'number') {
-                newCountry.inflation = wbVal;
-                newCountry.inflationYear = wbDate;
-                newCountry.inflationSourceLabel = `World Bank (FP.CPI.TOTL.ZG, ${wbDate})`;
-              }
-            }
-          } catch (wbErr) {
-            console.error('Inflation WB fallback failed:', wbErr);
-          }
+          console.error('Error fetching inflation (IMF PCPIPCH):', error);
         }
       })());
 
-      // Interest Rate (%, latest) — World Bank: FR.INR.RINR (Real interest rate)
+      // Interest Rate (%, latest) — IMF IFS: FILR_PA (percent per annum)
       tasks.push((async () => {
         try {
-          const interestResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FR.INR.RINR?format=json&per_page=1`
-          );
-          const interestData = await interestResponse.json();
-          if (Array.isArray(interestData) && Array.isArray(interestData[1]) && interestData[1][0]) {
-            const val = interestData[1][0].value;
-            const date = interestData[1][0].date;
-            if (typeof val === 'number') {
-              newCountry.interestRate = val;
-              newCountry.interestRateYear = date;
-              newCountry.interestRateSourceLabel = `World Bank (FR.INR.RINR, ${date})`;
-            }
+          const { value, year } = await getIFSInterestRateLatestWithYear(iso2);
+          if (value != null && typeof value === 'number') {
+            patchCountry({
+              interestRate: value,
+              interestRateYear: year ?? undefined,
+              interestRateSourceLabel: `IMF IFS (FILR_PA${year ? `, ${year}` : ''})`
+            });
           }
         } catch (error) {
-          console.error('Error fetching interest rate (WB):', error);
+          console.error('Error fetching interest rate (IMF):', error);
         }
       })());
 
-      // Unemployment — World Bank: SL.UEM.TOTL.ZS
+      // Unemployment Rate (%, latest) — IMF DataMapper: LUR (no WB fallback)
       tasks.push((async () => {
         try {
-          const unemploymentResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/SL.UEM.TOTL.ZS?format=json&per_page=1`
-          );
-          const unemploymentData = await unemploymentResponse.json();
-          if (Array.isArray(unemploymentData) && Array.isArray(unemploymentData[1]) && unemploymentData[1][0]) {
-            newCountry.unemployment = unemploymentData[1][0].value;
-            newCountry.unemploymentYear = unemploymentData[1][0].date;
+          const { value, year } = await getIMF_LURLatestWithYear(iso2);
+          if (value != null && typeof value === 'number') {
+            patchCountry({
+              unemployment: value,
+              unemploymentYear: year ?? undefined,
+              unemploymentSourceLabel: `IMF DataMapper (LUR${year ? `, ${year}` : ''})`
+            });
           }
         } catch (error) {
-          console.error('Error fetching unemployment:', error);
+          console.error('Error fetching unemployment (IMF LUR):', error);
         }
       })());
 
-      // Labor force participation — World Bank: SL.TLF.CACT.ZS
-      tasks.push((async () => {
-        try {
-          const laborResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/SL.TLF.CACT.ZS?format=json&per_page=1`
-          );
-          const laborData = await laborResponse.json();
-          if (Array.isArray(laborData) && Array.isArray(laborData[1]) && laborData[1][0]) {
-            newCountry.laborForceParticipation = laborData[1][0].value;
-            newCountry.laborForceParticipationYear = laborData[1][0].date;
-          }
-        } catch (error) {
-          console.error('Error fetching labor force participation:', error);
-        }
-      })());
+      // Labor force participation — IMF source not integrated yet (no WB calls)
 
-      // Regulatory Quality proxy — World Bank: GE.RQ.EST -> scale to 0-100
-      tasks.push((async () => {
-        try {
-          const rqResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/GE.RQ.EST?format=json&per_page=1`
-          );
-          const rqData = await rqResponse.json();
-          if (Array.isArray(rqData) && Array.isArray(rqData[1]) && rqData[1][0]) {
-            const val = rqData[1][0].value;
-            const date = rqData[1][0].date;
-            if (typeof val === 'number') {
-              const scaled = Math.round(((val + 2.5) / 5) * 100);
-              newCountry.easeOfDoingBusiness = Math.max(0, Math.min(100, scaled));
-              newCountry.easeOfDoingBusinessYear = date;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching regulatory quality:', error);
-        }
-      })());
+      // Regulatory Quality / Ease of Doing Business — IMF source not integrated yet (no WB calls)
 
-      // Legal rights index — World Bank: IC.LGL.CRED.XQ (0-12)
-      tasks.push((async () => {
-        try {
-          const legalResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/IC.LGL.CRED.XQ?format=json&per_page=1`
-          );
-          const legalData = await legalResponse.json();
-          if (Array.isArray(legalData) && Array.isArray(legalData[1]) && legalData[1][0]) {
-            const val = legalData[1][0].value;
-            const date = legalData[1][0].date;
-            if (typeof val === 'number') {
-              newCountry.legalFramework = `${val}/12`;
-              newCountry.legalFrameworkYear = date;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching legal rights index:', error);
-        }
-      })());
+      // Legal rights index — IMF source not integrated yet (no WB calls)
 
-      // Internet users — World Bank: IT.NET.USER.ZS
-      tasks.push((async () => {
-        try {
-          const internetResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/IT.NET.USER.ZS?format=json&per_page=1`
-          );
-          const internetData = await internetResponse.json();
-          if (Array.isArray(internetData) && Array.isArray(internetData[1]) && internetData[1][0]) {
-            const val = internetData[1][0].value;
-            const date = internetData[1][0].date;
-            if (typeof val === 'number') {
-              newCountry.digitalReadiness = `${val.toFixed(1)}%`;
-              newCountry.digitalReadinessYear = date;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching internet users:', error);
-        }
-      })());
+      // Internet users — IMF source not integrated yet (no WB calls)
 
-      // Domestic credit to private sector — World Bank: FS.AST.PRVT.GD.ZS
-      tasks.push((async () => {
-        try {
-          const creditResponse = await fetch(
-            `https://api.worldbank.org/v2/country/${country.iso2Code}/indicator/FS.AST.PRVT.GD.ZS?format=json&per_page=1`
-          );
-          const creditData = await creditResponse.json();
-          if (Array.isArray(creditData) && Array.isArray(creditData[1]) && creditData[1][0]) {
-            const val = creditData[1][0].value;
-            const date = creditData[1][0].date;
-            if (typeof val === 'number') {
-              const maturity = val >= 100 ? 'Mature' : val >= 60 ? 'Developing' : 'Emerging';
-              newCountry.marketMaturity = maturity;
-              newCountry.marketMaturityYear = date;
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching domestic credit to private sector:', error);
-        }
-      })());
+      // Domestic credit to private sector — IMF source not integrated yet (no WB calls)
 
       await Promise.allSettled(tasks);
-
     } catch (error) {
       console.error('Error adding country:', error);
     } finally {
-      setLoading(false);
+      // Clear per-country loading flag
+      setLoadingCountries(prev => prev.filter(c => c !== iso2));
     }
 
-    setCountries(prev => [...prev, newCountry]);
     setSearchTerm('');
   };
 
@@ -419,17 +439,17 @@ export default function ComparisonTable() {
   const getIndicatorSource = (country: CountryData, indicatorIndex: number): string | null => {
     switch (indicatorIndex) {
       case 0:
-        return country.gdpGrowthSourceLabel ?? (country.gdpGrowthYear ? `World Bank (NY.GDP.MKTP.KD.ZG, ${country.gdpGrowthYear})` : null);
+        return country.gdpGrowthSourceLabel ?? (country.gdpGrowthYear ? `IMF WEO (NGDP_RPCH, ${country.gdpGrowthYear})` : null);
       case 1:
-        return country.inflationSourceLabel ?? (country.inflationYear ? `World Bank (FP.CPI.TOTL.ZG, ${country.inflationYear})` : null);
+        return country.inflationSourceLabel ?? (country.inflationYear ? `IMF IFS (PCPIPCH, ${country.inflationYear})` : null);
       case 2:
-        return country.interestRateSourceLabel ?? (country.interestRateYear ? `World Bank (FR.INR.RINR, ${country.interestRateYear})` : null);
+        return country.interestRateSourceLabel ?? 'Source not integrated';
       case 3:
-        return country.unemploymentYear ? `World Bank (SL.UEM.TOTL.ZS, ${country.unemploymentYear})` : null;
+        return country.unemploymentSourceLabel ?? (country.unemploymentYear ? `IMF DataMapper (LUR, ${country.unemploymentYear})` : null);
       case 4:
-        return country.laborForceParticipationYear ? `World Bank (SL.TLF.CACT.ZS, ${country.laborForceParticipationYear})` : null;
+        return 'Source not integrated';
       case 5:
-        return country.easeOfDoingBusinessYear ? `World Bank (GE.RQ.EST, ${country.easeOfDoingBusinessYear})` : 'Source not integrated';
+        return 'Source not integrated';
       default:
         return 'Source not integrated';
     }
@@ -472,6 +492,25 @@ export default function ComparisonTable() {
                'bg-red-900/50 text-red-300 border-red-700';
       default:
         return 'bg-gray-900/50 text-gray-300 border-gray-700';
+    }
+  };
+
+  // Loading helpers for per-cell skeletons
+  const isCountryLoading = (iso2: string): boolean => loadingCountries.includes(iso2);
+
+  const isIndicatorLoading = (country: CountryData, indicatorIndex: number): boolean => {
+    if (!isCountryLoading(country.iso2)) return false;
+    switch (indicatorIndex) {
+      case 0: return country.gdpGrowth === undefined;
+      case 1: return country.inflation === undefined;
+      case 2: return country.interestRate === undefined;
+      case 3: return country.unemployment === undefined;
+      case 4: return country.laborForceParticipation === undefined;
+      case 5: return country.easeOfDoingBusiness === undefined;
+      case 6: return country.legalFramework === undefined;
+      case 7: return country.digitalReadiness === undefined;
+      case 8: return country.marketMaturity === undefined;
+      default: return false;
     }
   };
 
@@ -613,7 +652,22 @@ export default function ComparisonTable() {
                     type="text"
                     placeholder="🔍 Add country to table..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSearchTerm(v);
+                      // Instant ISO2 prefix preview for snappy UX
+                      const t = v.trim();
+                      if (t.length > 0 && worldBankCountries.length > 0) {
+                        const iso2Prefix = t.toUpperCase();
+                        const instant = worldBankCountries
+                          .filter(c => c.iso2Code.toUpperCase().startsWith(iso2Prefix))
+                          .slice(0, 10);
+                        if (instant.length > 0) {
+                          setFilteredCountries(instant);
+                          setSelectedIndex(-1);
+                        }
+                      }
+                    }}
                     onKeyDown={handleKeyDown}
                     className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-xl text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent backdrop-blur-sm text-base"
                   />
@@ -770,12 +824,16 @@ export default function ComparisonTable() {
                   </div>
                   {displayedCountries.map((country) => (
                     <div key={`${country.iso2}-${index}`} className="flex-shrink-0 p-4 text-gray-300 border-r border-white/20 w-[140px] flex items-center justify-center">
-                      <span
-                        title={getIndicatorSource(country, index) || undefined}
-                        className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-base font-medium border ${getIndicatorColor(country, index)}`}
-                      >
-                        {getIndicatorValue(country, index)}
-                      </span>
+                      {isIndicatorLoading(country, index) ? (
+                        <div className="w-16 h-6 rounded-full bg-white/10 border border-white/20 animate-pulse" />
+                      ) : (
+                        <span
+                          title={getIndicatorSource(country, index) || undefined}
+                          className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-base font-medium border ${getIndicatorColor(country, index)}`}
+                        >
+                          {getIndicatorValue(country, index)}
+                        </span>
+                      )}
                     </div>
                   ))}
 
@@ -785,19 +843,7 @@ export default function ComparisonTable() {
               )}
             </div>
           </div>
-
-
-
-          {loading && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white/10 backdrop-blur-sm p-8 rounded-2xl border border-white/20 shadow-2xl">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                  <p className="text-white text-lg">Loading country data...</p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Removed global blocking overlay; per-cell loaders give better feedback */}
         </div>
       </div>
     </div>

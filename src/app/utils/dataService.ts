@@ -1,6 +1,6 @@
 import type * as GeoJSON from "geojson";
-import { APIError, handleAPIError, logError, withRetry } from "./errorHandler";
-import { getWEONGDPDLatestUSDWithYear } from "./imfApi";
+import { handleAPIError, logError, withRetry } from "./errorHandler";
+import { getIMF_NGDPDLatestByIso3, getIMF_LPForYearByIso3, getIMF_LPLatestByIso3, getIMF_NGDPDForYearByIso3 } from "./imfApi";
 
 // Types
 export type WorldBankCountry = { id: string; name: string };
@@ -11,8 +11,9 @@ export type PopulationData = {
 
 // Cache management
 const gdpCache: Record<string, number> = {};
-const countryISOCache: Record<string, string> = {};
-let worldBankCountries: WorldBankCountry[] | null = null;
+const countryISO3Cache: Record<string, string> = {};
+let geojsonCache: { countries: GeoJSON.Feature[]; geojson: GeoJSON.FeatureCollection } | null = null;
+let imfCountryLabelToIso3: Record<string, string> | null = null;
 
 // Storage helpers
 export const getGDPFromStorage = (countryName: string): number | null => {
@@ -33,63 +34,88 @@ export const setGDPInStorage = (countryName: string, value: number): void => {
   }
 };
 
-// Load World Bank countries list (cached)
-const loadWorldBankCountries = async (): Promise<WorldBankCountry[]> => {
-  if (worldBankCountries) {
-    return worldBankCountries;
+// Resolve ISO3 using local GeoJSON (no external countries API)
+// Helper: robust ISO3 resolver from feature properties
+const resolveIso3 = (props: Record<string, unknown>): string => {
+  const candidates = ['ISO_A3', 'iso_a3', 'ADM0_A3', 'WB_A3', 'BRK_A3', 'iso3', 'ISO3'];
+  for (const key of candidates) {
+    const v = props[key];
+    if (typeof v === 'string' && v.length >= 3) return v.toUpperCase();
   }
+  return '';
+};
 
+// Load IMF countries mapping from public JSON and build label->ISO3 map
+const loadIMFCountryLabelMap = async (): Promise<Record<string, string>> => {
+  if (imfCountryLabelToIso3) return imfCountryLabelToIso3;
   try {
     const response = await withRetry(async () => {
-      const res = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=300');
+      const res = await fetch('/imf_countries.json');
       if (!res.ok) {
         throw new Response(res.statusText, { status: res.status });
       }
       return res;
     });
-
-    const data = await response.json();
-    
-    if (!Array.isArray(data) || !Array.isArray(data[1])) {
-      throw new APIError('Invalid World Bank countries response format', 'worldbank/countries');
+    const json = await response.json();
+    const map: Record<string, string> = {};
+    const countries = json?.countries ?? {};
+    for (const iso3 of Object.keys(countries)) {
+      const label = countries[iso3]?.label as string | null;
+      if (label && typeof label === 'string') {
+        map[label.toLowerCase()] = iso3.toUpperCase();
+      }
     }
-
-    worldBankCountries = data[1];
-    return worldBankCountries;
+    imfCountryLabelToIso3 = map;
+    return map;
   } catch (error) {
-    const apiError = handleAPIError(error, 'worldbank/countries');
-    logError(apiError, 'loadWorldBankCountries');
-    throw apiError;
+    logError(error, 'loadIMFCountryLabelMap');
+    imfCountryLabelToIso3 = {};
+    return imfCountryLabelToIso3;
   }
 };
 
-// Find ISO2 code for a country
-const findCountryISO2 = async (countryName: string): Promise<string | null> => {
-  if (countryISOCache[countryName]) {
-    return countryISOCache[countryName];
-  }
-
+const findCountryISO3 = async (countryName: string): Promise<string | null> => {
+  if (countryISO3Cache[countryName]) return countryISO3Cache[countryName];
   try {
-    const countries = await loadWorldBankCountries();
-    const found = countries.find(
-      (c: WorldBankCountry) => 
-        c.name && c.name.toLowerCase() === countryName.toLowerCase()
-    );
-
-    if (found?.id) {
-      countryISOCache[countryName] = found.id;
-      return found.id;
+    // 1) Try IMF countries mapping by label first
+    const labelMap = await loadIMFCountryLabelMap();
+    const isoFromMap = labelMap[countryName.toLowerCase()];
+    if (isoFromMap) {
+      countryISO3Cache[countryName] = isoFromMap;
+      return isoFromMap;
     }
 
+    // 2) Fallback: try GeoJSON feature properties and names
+    if (!geojsonCache) {
+      geojsonCache = await loadCountriesGeoJSON();
+    }
+    const features = geojsonCache.countries;
+    const lc = countryName.toLowerCase();
+    const f = features.find((feat: GeoJSON.Feature) => {
+      const props = (feat.properties ?? {}) as Record<string, unknown>;
+      const name = (props.name || props.NAME || feat.id || "") as string;
+      return typeof name === 'string' && name.toLowerCase() === lc;
+    });
+    if (!f) return null;
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const iso3 = resolveIso3(props);
+    if (iso3) {
+      countryISO3Cache[countryName] = iso3;
+      return countryISO3Cache[countryName];
+    }
     return null;
   } catch (error) {
-    logError(error, `findCountryISO2:${countryName}`);
+    logError(error, `findCountryISO3:${countryName}`);
     return null;
   }
 };
 
 // Load GDP data for a specific country (lazy loading)
-export const loadCountryGDP = async (countryName: string): Promise<number | null> => {
+// Prefer targetYear (e.g., 2025) to align with population logic; fallback to latest
+export const loadCountryGDP = async (
+  countryName: string,
+  targetYear = 2025
+): Promise<number | null> => {
   if (!countryName || typeof countryName !== 'string') {
     return null;
   }
@@ -107,59 +133,50 @@ export const loadCountryGDP = async (countryName: string): Promise<number | null
   }
 
   try {
-    // Find ISO2 code
-    const iso2 = await findCountryISO2(countryName);
-    if (!iso2) {
-      logError(`Country ISO2 not found for: ${countryName}`, 'loadCountryGDP');
+    // Find ISO3 code
+    const iso3 = await findCountryISO3(countryName);
+    if (!iso3) {
+      logError(`Country ISO3 not found for: ${countryName}`, 'loadCountryGDP');
       return null;
     }
-    // Fetch GDP from IMF WEO (NGDPD) as USD (converted from billions)
-    const { value } = await getWEONGDPDLatestUSDWithYear(iso2);
-    if (value != null) {
-      gdpCache[countryName] = value;
-      setGDPInStorage(countryName, value);
-      return value;
+    // Prefer targetYear (e.g., 2025), fallback to latest
+    let result = await getIMF_NGDPDForYearByIso3(iso3, targetYear);
+    if (result.value == null) {
+      const latest = await getIMF_NGDPDLatestByIso3(iso3);
+      result = latest;
+    }
+    if (result.value != null) {
+      gdpCache[countryName] = result.value;
+      setGDPInStorage(countryName, result.value);
+      return result.value;
     }
     return null;
   } catch (error) {
-    const apiError = handleAPIError(error, `imf/weo/ngdpd/${countryName}`);
+    const apiError = handleAPIError(error, `imf/datamapper/ngdpd/${countryName}`);
     logError(apiError, `loadCountryGDP:${countryName}`);
     return null;
   }
 };
 
 // Load all population data (this can remain as is since it's a single API call)
-export const loadPopulationData = async (): Promise<Record<string, number>> => {
+// IMF-only population for a single country by name; prefer targetYear (e.g., 2025), fallback to latest
+export const loadCountryPopulationIMF = async (
+  countryName: string,
+  targetYear = 2025
+): Promise<{ value: number | null; year: string | null }> => {
+  if (!countryName) return { value: null, year: null };
   try {
-    const response = await withRetry(async () => {
-      const res = await fetch('https://countriesnow.space/api/v0.1/countries/population');
-      if (!res.ok) {
-        throw new Response(res.statusText, { status: res.status });
-      }
-      return res;
-    });
-
-    const data = await response.json();
-    const popMap: Record<string, number> = {};
-
-    if (Array.isArray(data.data)) {
-      data.data.forEach((item: PopulationData) => {
-        if (item.country && Array.isArray(item.populationCounts) && item.populationCounts.length > 0) {
-          // Get the most recent population data
-          const mostRecent = item.populationCounts.reduce((a, b) => 
-            parseInt(a.year) > parseInt(b.year) ? a : b
-          );
-          popMap[item.country] = parseInt(mostRecent.value);
-        }
-      });
+    const iso3 = await findCountryISO3(countryName);
+    if (!iso3) return { value: null, year: null };
+    let res = await getIMF_LPForYearByIso3(iso3, targetYear);
+    if (res.value == null) {
+      res = await getIMF_LPLatestByIso3(iso3);
     }
-
-    return popMap;
+    return res;
   } catch (error) {
-    const apiError = handleAPIError(error, 'countriesnow/population');
-    logError(apiError, 'loadPopulationData');
-    // Return empty object instead of throwing to allow app to continue
-    return {};
+    const apiError = handleAPIError(error, `imf/datamapper/lp/${countryName}`);
+    logError(apiError, `loadCountryPopulationIMF:${countryName}`);
+    return { value: null, year: null };
   }
 };
 

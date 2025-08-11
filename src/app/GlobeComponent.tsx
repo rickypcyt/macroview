@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { loadCountriesGeoJSON, loadCountryGDP, loadPopulationData } from "./utils/dataService";
+import { loadCountriesGeoJSON, loadCountryGDP, loadCountryPopulationIMF } from "./utils/dataService";
 import { useCallback, useEffect, useState } from "react";
 
 import { Dashboard } from "./components/Dashboard";
@@ -78,13 +78,25 @@ export default function GlobeComponent({ viewMode: externalViewMode }: GlobeComp
         setGeojson(geojsonData);
         setLoadingStates(prev => ({ ...prev, countries: false }));
 
-        // Load population data
+        // Load population data from IMF per country (target year 2025, fallback to latest)
         setLoadingStates(prev => ({ ...prev, population: true }));
-        const populationData = await loadPopulationData();
+        const features = countriesData;
         const normalizedPopData: Record<string, number> = {};
-        Object.entries(populationData).forEach(([country, population]) => {
-          normalizedPopData[normalizeCountryName(country)] = population;
-        });
+        const concurrency = 8;
+        for (let i = 0; i < features.length; i += concurrency) {
+          const batch = features.slice(i, i + concurrency);
+          await Promise.all(
+            batch.map(async (feat) => {
+              const props = (feat.properties ?? {}) as Record<string, unknown>;
+              const name = (props.name || props.NAME || feat.id || "") as string;
+              if (!name) return;
+              const { value } = await loadCountryPopulationIMF(name, 2025);
+              if (value != null) {
+                normalizedPopData[normalizeCountryName(name)] = value;
+              }
+            })
+          );
+        }
         setPopByCountry(normalizedPopData);
         setLoadingStates(prev => ({ ...prev, population: false }));
 
