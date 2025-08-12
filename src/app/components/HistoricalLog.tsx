@@ -11,9 +11,9 @@ import {
   Title,
   Tooltip
 } from 'chart.js';
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Info } from 'lucide-react';
+import { Info, Search, X } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 
 ChartJS.register(
@@ -45,82 +45,168 @@ export function HistoricalLog() {
     inflation: [],
     gdp: []
   });
-  const [sources, setSources] = useState<{ inflation: string | null; gdp: string | null }>({ inflation: null, gdp: null });
   const [loading, setLoading] = useState(false);
 
-  // Fetch historical data from APIs
-  const fetchHistoricalData = async () => {
+  // Country search & selection state (World Bank countries)
+  interface Country {
+    id: string; // 3-letter WB country code (e.g., USA)
+    name: string;
+    iso2Code?: string;
+    region?: string;
+  }
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [fetchingCountries, setFetchingCountries] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [countryQuery, setCountryQuery] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  const filteredCountries = useMemo(() => {
+    const q = countryQuery.toLowerCase();
+    return countries
+      .filter(c => c.name.toLowerCase().includes(q) || (c.id && c.id.toLowerCase().includes(q)))
+      .slice(0, 100);
+  }, [countries, countryQuery]);
+
+  const fetchHistoricalData = useCallback(async () => {
     setLoading(true);
     
     try {
-      // World Bank only: historical inflation data (last ~25 years)
       const currentYear = new Date().getFullYear();
       const startYear = currentYear - 24;
-      const inflationResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=${startYear}:${currentYear}`);
-      const inflationData = await inflationResponse.json();
-      if (inflationData && inflationData[1]) {
-        const inflationByYear: Record<string, { total: number; count: number }> = {};
-        inflationData[1].forEach((item: { value?: number; date?: string }) => {
-          if (item.value != null && item.date) {
-            const year = item.date;
-            if (!inflationByYear[year]) {
-              inflationByYear[year] = { total: 0, count: 0 };
+      if (selectedCountry) {
+        const code = selectedCountry.id;
+        const wbUrl = `https://api.worldbank.org/v2/country/${code}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=${startYear}:${currentYear}`;
+        const wbResp = await fetch(wbUrl);
+        const wbJson = await wbResp.json();
+        if (wbJson && wbJson[1]) {
+          const inflationHistory: HistoricalDataPoint[] = wbJson[1]
+            .filter((item: { value?: number; date?: string }) => item.value != null && item.date)
+            .map((item: { value: number; date: string }) => ({ date: `${item.date}-01-01`, value: item.value, year: item.date }))
+            .sort((a: HistoricalDataPoint, b: HistoricalDataPoint) => parseInt(a.year) - parseInt(b.year));
+          setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
+        }
+      } else {
+        const inflationResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=${startYear}:${currentYear}`);
+        const inflationData = await inflationResponse.json();
+        if (inflationData && inflationData[1]) {
+          const inflationByYear: Record<string, { total: number; count: number }> = {};
+          inflationData[1].forEach((item: { value?: number; date?: string }) => {
+            if (item.value != null && item.date) {
+              const year = item.date;
+              if (!inflationByYear[year]) {
+                inflationByYear[year] = { total: 0, count: 0 };
+              }
+              inflationByYear[year].total += item.value as number;
+              inflationByYear[year].count += 1;
             }
-            inflationByYear[year].total += item.value as number;
-            inflationByYear[year].count += 1;
-          }
-        });
-        const inflationHistory = Object.entries(inflationByYear)
-          .map(([year, data]) => ({
-            date: `${year}-01-01`,
-            value: data.count ? data.total / data.count : 0,
-            year
-          }))
-          .sort((a, b) => parseInt(a.year) - parseInt(b.year));
-        setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
-        setSources(prev => ({ ...prev, inflation: 'World Bank (FP.CPI.TOTL.ZG)' }));
+          });
+          const inflationHistory = Object.entries(inflationByYear)
+            .map(([year, data]) => ({
+              date: `${year}-01-01`,
+              value: data.count ? data.total / data.count : 0,
+              year
+            }))
+            .sort((a, b) => parseInt(a.year) - parseInt(b.year));
+          setHistoricalData(prev => ({ ...prev, inflation: inflationHistory }));
+        }
       }
     } catch {
       console.log('Failed to fetch historical inflation data');
     }
     
     try {
-      // World Bank only: historical global nominal GDP (NY.GDP.MKTP.CD, USD)
       const currentYear2 = new Date().getFullYear();
       const startYear2 = currentYear2 - 24;
-      const gdpResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=200&date=${startYear2}:${currentYear2}`);
-      const gdpData = await gdpResponse.json();
-      if (gdpData && gdpData[1]) {
-        const gdpByYear: Record<string, { total: number; count: number }> = {};
-        gdpData[1].forEach((item: { value?: number; date?: string }) => {
-          if (item.value != null && item.date) {
-            const year = item.date;
-            if (!gdpByYear[year]) {
-              gdpByYear[year] = { total: 0, count: 0 };
+      if (selectedCountry) {
+        const code = selectedCountry.id;
+        const wbUrl = `https://api.worldbank.org/v2/country/${code}/indicator/NY.GDP.MKTP.CD?format=json&per_page=200&date=${startYear2}:${currentYear2}`;
+        const wbResp = await fetch(wbUrl);
+        const wbJson = await wbResp.json();
+        if (wbJson && wbJson[1]) {
+          const gdpHistory: HistoricalDataPoint[] = wbJson[1]
+            .filter((item: { value?: number; date?: string }) => item.value != null && item.date)
+            .map((item: { value: number; date: string }) => ({ date: `${item.date}-01-01`, value: item.value, year: item.date }))
+            .sort((a: HistoricalDataPoint, b: HistoricalDataPoint) => parseInt(a.year) - parseInt(b.year));
+          setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
+        }
+      } else {
+        const gdpResponse = await fetch(`https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=200&date=${startYear2}:${currentYear2}`);
+        const gdpData = await gdpResponse.json();
+        if (gdpData && gdpData[1]) {
+          const gdpByYear: Record<string, { total: number; count: number }> = {};
+          gdpData[1].forEach((item: { value?: number; date?: string }) => {
+            if (item.value != null && item.date) {
+              const year = item.date;
+              if (!gdpByYear[year]) {
+                gdpByYear[year] = { total: 0, count: 0 };
+              }
+              gdpByYear[year].total += item.value as number;
+              gdpByYear[year].count += 1;
             }
-            gdpByYear[year].total += item.value as number;
-            gdpByYear[year].count += 1;
-          }
-        });
-        const gdpHistory = Object.entries(gdpByYear)
-          .map(([year, data]) => ({
-            date: `${year}-01-01`,
-            value: data.total,
-            year
-          }))
-          .sort((a, b) => parseInt(a.year) - parseInt(b.year));
-        setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
-        setSources(prev => ({ ...prev, gdp: 'World Bank (NY.GDP.MKTP.CD)' }));
+          });
+          const gdpHistory = Object.entries(gdpByYear)
+            .map(([year, data]) => ({
+              date: `${year}-01-01`,
+              value: data.total,
+              year
+            }))
+            .sort((a, b) => parseInt(a.year) - parseInt(b.year));
+          setHistoricalData(prev => ({ ...prev, gdp: gdpHistory }));
+        }
       }
     } catch {
       console.log('Failed to fetch historical GDP data');
     }
-
-    setLoading(false);
-  };
+    finally {
+      setLoading(false);
+    }
+  }, [selectedCountry]);
 
   useEffect(() => {
     fetchHistoricalData();
+  }, [fetchHistoricalData]);
+
+  // Focus input when opening picker and reset highlight
+  useEffect(() => {
+    if (showCountryPicker) {
+      setHighlightedIndex(0);
+      // Focus next tick to ensure element is mounted
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [showCountryPicker]);
+
+  // Keep highlightedIndex in range when filtering
+  useEffect(() => {
+    if (highlightedIndex >= filteredCountries.length) {
+      setHighlightedIndex(0);
+    }
+  }, [filteredCountries.length, highlightedIndex]);
+
+  // Fetch World Bank country list for the search picker
+  useEffect(() => {
+    let cancelled = false;
+    const loadCountries = async () => {
+      try {
+        setFetchingCountries(true);
+        const res = await fetch('https://api.worldbank.org/v2/country?format=json&per_page=400');
+        const data = await res.json();
+        if (!cancelled && data && Array.isArray(data) && data[1]) {
+          interface WBApiCountry { id: string; name: string; iso2Code: string; region: { id: string; value: string } | null }
+          const mapped: Country[] = (data[1] as WBApiCountry[])
+            .filter((c: WBApiCountry) => c.region ? c.region.id !== 'NA' : false) // exclude aggregates already handled by 'all'
+            .map((c: WBApiCountry) => ({ id: c.id, name: c.name, iso2Code: c.iso2Code, region: c.region ? c.region.value : undefined }));
+          setCountries(mapped);
+        }
+      } catch (e) {
+        console.error('Failed to fetch World Bank countries', e);
+      } finally {
+        if (!cancelled) setFetchingCountries(false);
+      }
+    };
+    loadCountries();
+    return () => { cancelled = true; };
   }, []);
 
   // Removed unused formatDate helper
@@ -156,9 +242,10 @@ export function HistoricalLog() {
   };
 
   const getActiveLabel = () => {
+    const scope = selectedCountry ? `${selectedCountry.name}` : 'Global';
     switch (activeTab) {
-      case 'inflation': return 'Inflation Rate (%)';
-      case 'gdp': return 'Global GDP ($)';
+      case 'inflation': return `${scope} Inflation Rate (%)`;
+      case 'gdp': return `${scope} GDP ($)`;
       default: return '';
     }
   };
@@ -171,7 +258,9 @@ export function HistoricalLog() {
       labels: data.map(d => d.year),
       datasets: [
         {
-          label: activeTab === 'gdp' ? 'Global GDP' : 'Global Inflation',
+          label: activeTab === 'gdp'
+            ? `${selectedCountry ? selectedCountry.name : 'Global'} GDP`
+            : `${selectedCountry ? selectedCountry.name : 'Global'} Inflation`,
           data: data.map(d => d.value),
           borderColor: activeTab === 'gdp' ? '#10B981' : '#F59E0B',
           backgroundColor: activeTab === 'gdp' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
@@ -299,6 +388,92 @@ export function HistoricalLog() {
 
   return (
     <div className="relative">
+      {/* Country Search Button (top-left) */}
+      <div className="absolute top-0 left-0 z-10">
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowCountryPicker((s) => !s);
+              if (!showCountryPicker) {
+                setCountryQuery('');
+                setHighlightedIndex(0);
+              }
+            }}
+            className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200"
+            aria-label="Search Country"
+          >
+            {showCountryPicker ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+          </button>
+
+          {/* Country Picker Popover */}
+          {showCountryPicker && (
+            <div className="absolute top-10 left-0 w-80 bg-neutral-900/95 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-3 text-sm text-gray-100">
+              <div className="mb-2">
+                <input
+                  ref={inputRef}
+                  value={countryQuery}
+                  onChange={(e) => {
+                    setCountryQuery(e.target.value);
+                    setHighlightedIndex(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setHighlightedIndex((i) => Math.min(i + 1, Math.max(filteredCountries.length - 1, 0)));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setHighlightedIndex((i) => Math.max(i - 1, 0));
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const choice = filteredCountries[highlightedIndex];
+                      if (choice) {
+                        setSelectedCountry(choice);
+                        setShowCountryPicker(false);
+                      }
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setShowCountryPicker(false);
+                    }
+                  }}
+                  placeholder="Search country..."
+                  className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+              </div>
+              <div className="max-h-60 overflow-auto custom-scrollbar">
+                {fetchingCountries ? (
+                  <div className="text-gray-400 py-6 text-center">Loading countries...</div>
+                ) : (
+                  filteredCountries.map((c, idx) => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCountry(c);
+                        setShowCountryPicker(false);
+                      }}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      className={`w-full text-left px-3 py-2 rounded-md transition flex items-center justify-between 
+                        ${highlightedIndex === idx ? 'bg-white/20' : 'hover:bg-white/10'} 
+                        ${selectedCountry?.id === c.id ? 'ring-1 ring-white/20' : ''}`}
+                    >
+                      <span>{c.name}</span>
+                      <span className="text-gray-400 text-xs">{c.id}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+                <button
+                  className="hover:text-white"
+                  onClick={() => { setSelectedCountry(null); setCountryQuery(''); setShowCountryPicker(false); }}
+                >
+                  Clear selection (Global)
+                </button>
+                {selectedCountry && <span>Selected: {selectedCountry.name}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       {/* Info Icon */}
       <div className="absolute top-0 right-0 z-10">
         <div className="group relative">
@@ -372,7 +547,7 @@ export function HistoricalLog() {
         {loading ? (
           <div className="text-center py-8">
             <div className="text-gray-300 text-lg">Loading historical data...</div>
-            <div className="mt-4 text-gray-400">Fetching data (IMF first, World Bank fallback)</div>
+            <div className="mt-4 text-gray-400">Fetching data from World Bank</div>
           </div>
         ) : activeHistory.length > 0 ? (
           <div>
@@ -382,14 +557,25 @@ export function HistoricalLog() {
             </div>
             {renderChart()}
             <p className="text-gray-500 text-sm mt-2 text-center">
-              Source: {activeTab === 'inflation' ? 'World Bank (FP.CPI.TOTL.ZG)' : (sources.gdp ?? 'World Bank (NY.GDP.MKTP.CD)')}
+              Source: {activeTab === 'inflation' ? 'World Bank (FP.CPI.TOTL.ZG)' : 'World Bank (NY.GDP.MKTP.CD)'}
             </p>
+            {selectedCountry && (
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCountry(null)}
+                  className="text-white hover:text-white/90 text-xs sm:text-sm underline underline-offset-2"
+                >
+                  return to global
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-8">
             <div className="text-gray-400 text-lg mb-2">📊 No historical data available</div>
             <div className="text-gray-500 text-sm">
-              Unable to fetch historical {activeTab} data from IMF or World Bank APIs
+              Unable to fetch historical {activeTab} data from World Bank API
             </div>
           </div>
         )}
