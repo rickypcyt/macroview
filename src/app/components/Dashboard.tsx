@@ -421,8 +421,9 @@ export function Dashboard({
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-18 lg:px-6">
       {/* Header Card */}
-      <div className="w-full p-4 sm:p-6 md:p-8 lg:p-12 pt-4 sm:pt-6 md:pt-8 lg:pt-8 pb-2 sm:pb-4 md:pb-4 lg:pb-4 px-4 sm:px-6 md:px-12 lg:px-24">
+      <div className="w-full sm:pt-10 md:pt-8 lg:pt-8 pb-2 sm:pb-4 md:pb-4 lg:pb-4">
         <div className="w-full">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
             <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-2 sm:mb-3 md:mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
@@ -463,7 +464,7 @@ export function Dashboard({
       )}
 
       {/* Main Dashboard Grid */}
-      <div className="w-full px-4 sm:px-6 md:px-16 lg:px-24 pb-8 sm:pb-12 md:pb-14 lg:pb-16">
+      <div className="w-full pb-8 sm:pb-12 md:pb-14 lg:pb-16">
         <div className="w-full space-y-6 sm:space-y-8">
           {/* Chart and Global Stats Layout */}
           <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 md:gap-8 h-full">
@@ -489,14 +490,12 @@ export function Dashboard({
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-white/20">
             <NewsSection />
           </div>
-
           {/* Data Sources Card */}
           <DataSourcesCard />
-
+          
         </div>
       </div>
-      
-      
+      </div>
     </div>
   );
 }

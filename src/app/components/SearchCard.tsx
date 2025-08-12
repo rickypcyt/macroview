@@ -30,7 +30,7 @@ export function SearchCard(props: SearchCardProps) {
   } = props;
 
   return (
-    <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 mb-6 sm:mb-2 md:mb-4 lg:mb-4">
+    <div className="w-full mb-6 sm:mb-2 md:mb-4 lg:mb-4">
       <div className="w-full">
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-6 sm:p-8 md:p-10 lg:p-12 border border-white/20">
           <CountrySearch

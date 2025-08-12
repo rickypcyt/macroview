@@ -772,17 +772,17 @@ export default function ComparisonTable() {
 
   return (
     <div id="comparison-export-root" className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
-      <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 pt-5 pb-5">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-20 lg:px-16 xl:px-6 md:pt-10 lg:pt-20 pb-6">
         <div className="w-full">
           {/* Toolbar Card */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 border border-white/20 mb-6">
             {/* Top bar like navbar */}
             <div className="flex items-center gap-3 sm:gap-4">
               {/* Left placeholder for future buttons */}
-              <div className="w-24 sm:w-32" />
+              <div className="hidden sm:block w-24 sm:w-32" />
 
-              {/* Center search */}
-              <div className="flex-1 flex justify-center">
+              {/* Search: left-aligned on mobile, centered on sm+ */}
+              <div className="flex-1 flex justify-start sm:justify-center">
                 <div className="w-full max-w-lg">
                   <input
                     type="text"
@@ -932,13 +932,13 @@ export default function ComparisonTable() {
               <>
               {/* Header Row */}
               <div className="flex bg-white/5 border-b border-white/20 min-w-max">
-                <div className="flex-shrink-0 p-4 font-semibold text-white border-r border-white/20 w-[180px] text-center text-base">
+                <div className="flex-shrink-0 p-4 font-semibold text-white border-r border-white/20 w-[140px] sm:w-[160px] md:w-[180px] text-center text-sm sm:text-base">
                   Indicators
                 </div>
                 {displayedCountries.map((country) => (
-                  <div key={country.iso3} className="flex-shrink-0 p-4 font-semibold text-white border-r border-white/20 w-[140px]">
+                  <div key={country.iso3} className="flex-shrink-0 p-4 font-semibold text-white border-r border-white/20 w-[110px] sm:w-[120px] md:w-[130px] lg:w-[140px]">
                     <div className="relative flex items-center justify-center">
-                      <span className="truncate text-base text-center">{country.name}</span>
+                      <span className="truncate text-sm sm:text-base text-center">{country.name}</span>
                       <button
                         onClick={() => removeCountry(country.iso3)}
                         className="absolute right-0 text-gray-400 hover:text-red-400 transition-colors text-base flex-shrink-0"
@@ -957,10 +957,10 @@ export default function ComparisonTable() {
                 <div key={indicator} className={`flex border-b border-white/10 min-w-max ${
                   index % 2 === 0 ? 'bg-white/5' : 'bg-transparent'
                 }`}>
-                  <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[180px] text-base relative">
+                  <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[140px] sm:w-[160px] md:w-[180px] text-sm sm:text-base relative">
                     <div className="flex items-start">
                       <span className="inline-block w-3 h-3" aria-hidden="true"></span>
-                      <span className="flex-1 block text-center text-sm sm:text-sm leading-tight">
+                      <span className="flex-1 block text-center text-xs sm:text-sm leading-tight">
                         {indicator.includes(' (') ? (
                           <>
                             <span className="block">{indicator.slice(0, indicator.indexOf(' ('))}</span>
@@ -1008,7 +1008,7 @@ export default function ComparisonTable() {
                     </div>
                   </div>
                   {displayedCountries.map((country) => (
-                    <div key={`${country.iso3}-${index}`} className="flex-shrink-0 p-4 text-gray-300 border-r border-white/20 w-[140px] flex items-center justify-center">
+                    <div key={`${country.iso3}-${index}`} className="flex-shrink-0 p-4 text-gray-300 border-r border-white/20 w-[110px] sm:w-[120px] md:w-[130px] lg:w-[140px] flex items-center justify-center">
                       {isIndicatorLoading(country, index) ? (
                         <div className="w-16 h-6 rounded-full bg-white/10 border border-white/20 animate-pulse" />
                       ) : (
