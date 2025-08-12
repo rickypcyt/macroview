@@ -13,6 +13,15 @@ import { iso2ToIso3, iso3ToIso2, getWEOGDPGrowthLatestByIso3UpTo, getIFSInterest
 // Cap IMF "latest" to avoid future projection years
 const MAX_IMF_YEAR = 2025;
 
+// Guard long-running network calls so loading state doesn't hang
+function withTimeout<T>(promise: Promise<T>, ms = 12000, label = 'request'): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 interface CountryData {
   name: string;
   iso3: string;
@@ -323,7 +332,11 @@ export default function ComparisonTable() {
       // GDP Growth (annual %, latest<=2025) — IMF WEO: NGDP_RPCH (ISO3)
       tasks.push((async () => {
         try {
-          const { value, year } = await getWEOGDPGrowthLatestByIso3UpTo(iso3, MAX_IMF_YEAR);
+          const { value, year } = await withTimeout(
+            getWEOGDPGrowthLatestByIso3UpTo(iso3, MAX_IMF_YEAR),
+            12000,
+            `IMF WEO NGDP_RPCH ${iso3}`
+          );
           if (value != null && typeof value === 'number') {
             patchCountry({
               gdpGrowth: value,
@@ -339,7 +352,11 @@ export default function ComparisonTable() {
       // Inflation (YoY, latest<=2025) — IMF IFS: PCPIEPCH (end-of-period, ISO3)
       tasks.push((async () => {
         try {
-          const { value, year } = await getIMF_IFS_PCPIEPCHLatestByIso3UpTo(iso3, MAX_IMF_YEAR);
+          const { value, year } = await withTimeout(
+            getIMF_IFS_PCPIEPCHLatestByIso3UpTo(iso3, MAX_IMF_YEAR),
+            12000,
+            `IMF IFS PCPIEPCH ${iso3}`
+          );
           if (value != null && typeof value === 'number') {
             patchCountry({
               inflation: value,
@@ -374,7 +391,11 @@ export default function ComparisonTable() {
       // Unemployment Rate (%, latest<=2025) — IMF DataMapper: LUR (ISO3)
       tasks.push((async () => {
         try {
-          const { value, year } = await getIMF_LURLatestByIso3UpTo(iso3, MAX_IMF_YEAR);
+          const { value, year } = await withTimeout(
+            getIMF_LURLatestByIso3UpTo(iso3, MAX_IMF_YEAR),
+            12000,
+            `IMF DM LUR ${iso3}`
+          );
           if (value != null && typeof value === 'number') {
             patchCountry({
               unemployment: value,
@@ -387,11 +408,13 @@ export default function ComparisonTable() {
         }
       })());
 
-      // Labor Force Participation (%, latest) — World Bank: SL.TLF.ACTI.ZS (ISO3)
+      // Labor Force Participation (%, latest) — World Bank: SL.TLF.ACTI.ZS (use ISO2 for WB)
       tasks.push((async () => {
         try {
-          const url = `https://api.worldbank.org/v2/country/${iso3}/indicator/SL.TLF.ACTI.ZS?format=json&per_page=1`;
-          const res = await fetch(url, { cache: 'no-store' });
+          const iso2wb = iso3ToIso2(iso3);
+          if (!iso2wb) return;
+          const url = `https://api.worldbank.org/v2/country/${iso2wb}/indicator/SL.TLF.ACTI.ZS?format=json&per_page=1`;
+          const res = await withTimeout(fetch(url, { cache: 'no-store' }), 12000, `WB SL.TLF.ACTI.ZS ${iso2wb}`);
           const json = await res.json();
           const dataArr = Array.isArray(json) ? json[1] : null;
           const row = Array.isArray(dataArr) && dataArr.length > 0 ? dataArr[0] : null;
