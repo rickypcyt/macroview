@@ -104,10 +104,7 @@ const INDICATORS = [
   'Market Maturity (Factoring/ABL)'
 ];
 
-
-
 export default function ComparisonTable() {
-  // Mount flag; do not change hooks order based on it
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -518,12 +515,12 @@ export default function ComparisonTable() {
         }
       })());
 
-      // Ease of Doing Business (rank, latest) — World Bank: IC.BUS.EASE.XQ (use ISO2 for WB)
+      // Ease of Doing Business (rank, latest available) — World Bank: IC.BUS.EASE.RNK (use ISO2 for WB)
       tasks.push((async () => {
         try {
           const iso2wb = iso3ToIso2(iso3);
           if (!iso2wb) return;
-          const { value, year } = await fetchWBLatestNonNullNumber(iso2wb, 'IC.BUS.EASE.XQ', `WB IC.BUS.EASE.XQ ${iso2wb}`);
+          const { value, year } = await fetchWBLatestNonNullNumber(iso2wb, 'IC.BUS.EASE.RNK', `WB IC.BUS.EASE.RNK ${iso2wb}`);
           if (value != null) {
             patchCountry({
               easeOfDoingBusiness: value,
@@ -588,7 +585,7 @@ export default function ComparisonTable() {
       case 4:
         return country.laborForceParticipationYear ? `World Bank (SL.TLF.ACTI.ZS, ${country.laborForceParticipationYear})` : 'World Bank (SL.TLF.ACTI.ZS)';
       case 5:
-        return country.easeOfDoingBusinessYear ? `World Bank (IC.BUS.EASE.XQ, ${country.easeOfDoingBusinessYear})` : 'World Bank (IC.BUS.EASE.XQ)';
+        return country.easeOfDoingBusinessYear ? `World Bank (IC.BUS.EASE.RNK, ${country.easeOfDoingBusinessYear})` : 'World Bank (IC.BUS.EASE.RNK)';
       case 6:
         return 'Source not integrated';
       case 7:
@@ -957,7 +954,7 @@ export default function ComparisonTable() {
 
               {/* Data Rows */}
               {INDICATORS.map((indicator, index) => (
-                <div key={indicator} className={`flex border-b border-white/10 hover:bg-white/5 transition-colors min-w-max ${
+                <div key={indicator} className={`flex border-b border-white/10 min-w-max ${
                   index % 2 === 0 ? 'bg-white/5' : 'bg-transparent'
                 }`}>
                   <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[180px] text-base relative">
@@ -982,8 +979,8 @@ export default function ComparisonTable() {
                           >
                             <Info className="w-3 h-3" />
                           </button>
-                          {(index === 0 || index === 1 || index === 3) && (
-                            <div className="absolute top-5 left-full ml-2 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-3 text-[11px] sm:text-xs text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                          {(index === 0 || index === 1 || index === 2 || index === 3) && (
+                            <div className="absolute top-5 left-full ml-2 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-3 text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
                               {index === 0 && (
                                 <p>
                                   Gross domestic product is the most commonly used single measure of a country&#39;s overall economic activity. It represents the total value at constant prices of final goods and services produced within a country during a specified time period, such as one year.
@@ -992,6 +989,11 @@ export default function ComparisonTable() {
                               {index === 1 && (
                                 <p>
                                   The end of period consumer price index (CPI) is a measure of a country&#39;s general level of prices based on the cost of a typical basket of consumer goods and services at the end of a given period. The rate of inflation is the percent change in the end of period CPI.
+                                </p>
+                              )}
+                              {index === 2 && (
+                                <p>
+                                  An interest rate is the amount charged, expressed as a percentage of the principal over a period of time, by the owners of certain kinds of financial assets for putting the financial assets at the disposal of another institutional unit. The real interest rate is the lending interest rate adjusted for inflation as measured by the GDP deflator. The terms and conditions attached to lending rates differ by country, however, limiting their comparability. This indicator is expressed as a percentage (a÷b)*100.
                                 </p>
                               )}
                               {index === 3 && (

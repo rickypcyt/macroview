@@ -139,13 +139,13 @@ export default function GlobeComponent({ viewMode: externalViewMode }: GlobeComp
       )}
 
       {/* Loading Indicator */}
-      {(loadingStates.countries || loadingStates.population) && (
+      {loadingStates.countries && (
         <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[1001]">
           <div className="bg-blue-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-lg shadow-lg border border-blue-400/20">
             <div className="flex items-center gap-2">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
               <span className="text-sm">
-                Loading {loadingStates.countries ? 'countries' : 'population data'}...
+                Loading countries...
               </span>
             </div>
           </div>
