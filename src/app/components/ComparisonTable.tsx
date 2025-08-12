@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Fuse from 'fuse.js';
 import { toPng } from 'html-to-image';
-import { iso2ToIso3, iso3ToIso2, getWEOGDPGrowthLatestByIso3UpTo, getIFSInterestRateLatestWithYear, getIMF_LURLatestByIso3UpTo, getIMF_IFS_PCPIEPCHLatestByIso3UpTo } from '../utils/imfApi';
+import { iso2ToIso3, iso3ToIso2, getWEOGDPGrowthLatestByIso3UpTo, getIMF_LURLatestByIso3UpTo, getIMF_IFS_PCPIEPCHLatestByIso3UpTo } from '../utils/imfApi';
 
 // import { loadCountryGDP } from '../utils/dataService';
 
@@ -12,6 +12,7 @@ import { iso2ToIso3, iso3ToIso2, getWEOGDPGrowthLatestByIso3UpTo, getIFSInterest
 
 // Cap IMF "latest" to avoid future projection years
 const MAX_IMF_YEAR = 2025;
+const STORAGE_KEY = 'comparisonTable.countries';
 
 // Guard long-running network calls so loading state doesn't hang
 function withTimeout<T>(promise: Promise<T>, ms = 12000, label = 'request'): Promise<T> {
@@ -20,6 +21,35 @@ function withTimeout<T>(promise: Promise<T>, ms = 12000, label = 'request'): Pro
     timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// World Bank API typed helpers
+type WBRow = { value: number | string | null; date: string };
+async function fetchWBLatestNonNullNumber(iso2: string, indicator: string, label: string): Promise<{ value: number | null; year: string | null }> {
+  // 1) Try MRV=1 for most recent non-null
+  const urlLatest = `https://api.worldbank.org/v2/country/${iso2}/indicator/${indicator}?format=json&MRV=1`;
+  const resLatest = await withTimeout(fetch(urlLatest, { cache: 'no-store' }), 12000, `${label} latest`);
+  const jsonLatest = await resLatest.json();
+  let rows: WBRow[] = Array.isArray(jsonLatest) ? (jsonLatest[1] as WBRow[]) : [];
+  if (Array.isArray(rows) && rows.length) {
+    const r = rows[0];
+    const v = r && r.value != null ? Number(r.value) : null;
+    if (!Number.isNaN(v as number) && v != null) {
+      return { value: v, year: r.date ? String(r.date) : null };
+    }
+  }
+  // 2) Fallback: fetch a larger window and pick first non-null numeric
+  const urlScan = `https://api.worldbank.org/v2/country/${iso2}/indicator/${indicator}?format=json&per_page=200`;
+  const resScan = await withTimeout(fetch(urlScan, { cache: 'no-store' }), 12000, `${label} scan`);
+  const jsonScan = await resScan.json();
+  rows = Array.isArray(jsonScan) ? (jsonScan[1] as WBRow[]) : [];
+  if (Array.isArray(rows) && rows.length) {
+    const first = rows.find(r => r && r.value != null && !Number.isNaN(Number(r.value)));
+    if (first) {
+      return { value: Number(first.value), year: first.date ? String(first.date) : null };
+    }
+  }
+  return { value: null, year: null };
 }
 
 interface CountryData {
@@ -57,13 +87,15 @@ interface SearchCountry {
   incomeLevel?: string;
 }
 
+type StoredCountry = { iso3: string; name: string };
+
 const INDICATORS = [
   'GDP Growth (annual %, latest)',
   'Inflation (YoY, latest)',
   'Real Interest Rate (%, latest)',
   'Unemployment Rate (%, latest)',
   'Labor Force Participation (%, latest)',
-  'Ease of Doing Business (0–100, latest)',
+  'Ease of Doing Business (rank, latest)',
   'Legal Framework (Factoring/ABL)',
   'Digital/Fintech Readiness',
   'Market Maturity (Factoring/ABL)'
@@ -87,6 +119,44 @@ export default function ComparisonTable() {
   const [loadingCountries, setLoadingCountries] = useState<string[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [sortAZ, setSortAZ] = useState(true);
+  const restoredRef = useRef(false);
+
+  // Restore selected countries from localStorage on first mount
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+      if (!raw) return;
+      const list: StoredCountry[] = JSON.parse(raw);
+      if (!Array.isArray(list)) return;
+      list.forEach((sc) => {
+        if (!sc || !sc.iso3 || !sc.name) return;
+        const iso2 = iso3ToIso2(sc.iso3);
+        const stub: SearchCountry = { id: sc.iso3, name: sc.name, iso3Code: sc.iso3, iso2Code: iso2 ?? null };
+        // addCountry handles dedupe and triggers fresh indicator fetches
+        addCountry(stub);
+      });
+    } catch (e) {
+      console.error('Failed to restore countries from storage:', e);
+    }
+    // Mark restoration attempt complete so future changes persist
+    restoredRef.current = true;
+    // run only once after mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
+
+  // Persist minimal list (iso3 + name) whenever countries list changes
+  useEffect(() => {
+    if (!mounted || !restoredRef.current) return;
+    try {
+      const minimal: StoredCountry[] = countries.map(c => ({ iso3: c.iso3, name: c.name }));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(minimal));
+      }
+    } catch (e) {
+      console.error('Failed to persist countries to storage:', e);
+    }
+  }, [countries, mounted]);
 
   // Load countries list from IMF (ISO3-first). Fall back to WB if needed
   useEffect(() => {
@@ -369,22 +439,21 @@ export default function ComparisonTable() {
         }
       })());
 
-      // Interest Rate (%, latest) — IMF IFS: FILR_PA (percent per annum) uses ISO2
+      // Real Interest Rate (%, latest) — World Bank: FR.INR.RINR (use ISO2 for WB)
       tasks.push((async () => {
         try {
-          const iso2 = iso3ToIso2(iso3);
-          if (iso2) {
-            const { value, year } = await getIFSInterestRateLatestWithYear(iso2);
-            if (value != null && typeof value === 'number') {
-              patchCountry({
-                interestRate: value,
-                interestRateYear: year ?? undefined,
-                interestRateSourceLabel: year ? `IMF IFS (FILR_PA, ${year})` : 'IMF IFS (FILR_PA)'
-              });
-            }
+          const iso2wb = iso3ToIso2(iso3);
+          if (!iso2wb) return;
+          const { value, year } = await fetchWBLatestNonNullNumber(iso2wb, 'FR.INR.RINR', `WB FR.INR.RINR ${iso2wb}`);
+          if (value != null) {
+            patchCountry({
+              interestRate: value,
+              interestRateYear: year ?? undefined,
+              interestRateSourceLabel: year ? `World Bank (FR.INR.RINR, ${year})` : 'World Bank (FR.INR.RINR)'
+            });
           }
         } catch (error) {
-          console.error('Error fetching interest rate (IFS):', error);
+          console.error('Error fetching real interest rate (World Bank):', error);
         }
       })());
 
@@ -431,6 +500,23 @@ export default function ComparisonTable() {
         }
       })());
 
+      // Ease of Doing Business (rank, latest) — World Bank: IC.BUS.EASE.XQ (use ISO2 for WB)
+      tasks.push((async () => {
+        try {
+          const iso2wb = iso3ToIso2(iso3);
+          if (!iso2wb) return;
+          const { value, year } = await fetchWBLatestNonNullNumber(iso2wb, 'IC.BUS.EASE.XQ', `WB IC.BUS.EASE.XQ ${iso2wb}`);
+          if (value != null) {
+            patchCountry({
+              easeOfDoingBusiness: value,
+              easeOfDoingBusinessYear: year ?? undefined,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching ease of doing business (World Bank):', error);
+        }
+      })());
+
       await Promise.allSettled(tasks);
     } catch (error) {
       console.error('Error adding country:', error);
@@ -458,8 +544,8 @@ export default function ComparisonTable() {
         return country.unemployment ? `${country.unemployment.toFixed(1)}%` : 'N/A';
       case 4: // Labor Force Participation
         return country.laborForceParticipation ? `${country.laborForceParticipation.toFixed(1)}%` : 'N/A';
-      case 5: // Ease of Doing Business
-        return country.easeOfDoingBusiness ? `${country.easeOfDoingBusiness}/100` : 'N/A';
+      case 5: // Ease of Doing Business (rank)
+        return country.easeOfDoingBusiness ? `${Math.round(country.easeOfDoingBusiness)}` : 'N/A';
       case 6: // Legal Framework
         return country.legalFramework || 'N/A';
       case 7: // Digital Readiness
@@ -478,13 +564,13 @@ export default function ComparisonTable() {
       case 1:
         return country.inflationSourceLabel ?? (country.inflationYear ? `IMF IFS (PCPIEPCH, ${country.inflationYear})` : null);
       case 2:
-        return country.interestRateSourceLabel ?? (country.interestRateYear ? `IMF IFS (FILR_PA, ${country.interestRateYear})` : 'IMF IFS (FILR_PA)');
+        return country.interestRateSourceLabel ?? (country.interestRateYear ? `World Bank (FR.INR.RINR, ${country.interestRateYear})` : 'World Bank (FR.INR.RINR)');
       case 3:
         return country.unemploymentSourceLabel ?? (country.unemploymentYear ? `IMF DataMapper (LUR, ${country.unemploymentYear})` : 'IMF DataMapper (LUR)');
       case 4:
         return country.laborForceParticipationYear ? `World Bank (SL.TLF.ACTI.ZS, ${country.laborForceParticipationYear})` : 'World Bank (SL.TLF.ACTI.ZS)';
       case 5:
-        return 'Source not integrated';
+        return country.easeOfDoingBusinessYear ? `World Bank (IC.BUS.EASE.XQ, ${country.easeOfDoingBusinessYear})` : 'World Bank (IC.BUS.EASE.XQ)';
       case 6:
         return 'Source not integrated';
       case 7:
@@ -514,10 +600,10 @@ export default function ComparisonTable() {
         return unemployment > 8 ? 'bg-red-900/50 text-red-300 border-red-700' : 'bg-green-900/50 text-green-300 border-green-700';
       case 4: // Labor Force Participation
         return 'bg-purple-900/50 text-purple-300 border-purple-700';
-      case 5: // Ease of Doing Business
-        const easeScore = parseInt(value.split('/')[0]);
-        return easeScore > 80 ? 'bg-green-900/50 text-green-300 border-green-700' : 
-               easeScore > 60 ? 'bg-yellow-900/50 text-yellow-300 border-yellow-700' : 
+      case 5: // Ease of Doing Business (rank - lower is better)
+        const rank = parseInt(value);
+        return rank <= 50 ? 'bg-green-900/50 text-green-300 border-green-700' : 
+               rank <= 100 ? 'bg-yellow-900/50 text-yellow-300 border-yellow-700' : 
                'bg-red-900/50 text-red-300 border-red-700';
       case 6: // Legal Framework
         return value === 'Advanced' ? 'bg-green-900/50 text-green-300 border-green-700' :
@@ -599,7 +685,7 @@ export default function ComparisonTable() {
     URL.revokeObjectURL(url);
   };
 
-  const exportAs = async (format: 'markdown' | 'csv' | 'pdf' | 'image') => {
+  const exportAs = async (format: 'markdown' | 'csv' | 'image') => {
     const matrix = buildExportMatrix();
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     if (format === 'csv') {
@@ -608,56 +694,12 @@ export default function ComparisonTable() {
     } else if (format === 'markdown') {
       const md = toMarkdown(matrix);
       downloadFile(md, `comparison-${timestamp}.md`, 'text/markdown;charset=utf-8');
-    } else if (format === 'pdf') {
-      // Lightweight PDF via browser print to PDF (table only)
-      const printHtml = `<!doctype html>
-        <html>
-          <head>
-            <meta charset=\"utf-8\" />
-            <title>Comparison Export</title>
-            <style>
-              body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; padding: 24px; }
-              table { border-collapse: collapse; width: 100%; }
-              th, td { border: 1px solid #ccc; padding: 8px; font-size: 12px; }
-              th { background: #f5f5f5; text-align: left; }
-            </style>
-          </head>
-          <body>
-            <table>
-              <thead>
-                <tr>${matrix[0].map(h => `<th>${h}</th>`).join('')}</tr>
-              </thead>
-              <tbody>
-                ${matrix.slice(1).map(row => `<tr>${row.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}
-              </tbody>
-            </table>
-            <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); }<\/script>
-          </body>
-        </html>`;
-      const win = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=800');
-      if (win) {
-        win.document.open();
-        win.document.write(printHtml);
-        win.document.close();
-      }
     } else if (format === 'image') {
-      // Render markdown then capture OR capture the on-screen table if available
-      const md = toMarkdown(matrix);
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-10000px';
-      container.style.top = '0';
-      container.style.width = '800px';
-      container.style.background = '#0b0b0b';
-      container.style.color = '#ffffff';
-      container.style.padding = '16px';
-      container.innerHTML = `
-        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial;">
-          <pre style="white-space: pre-wrap; font-size: 12px; line-height: 1.4;">${md.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-        </div>`;
-      document.body.appendChild(container);
+      // Capture only the on-screen comparison table
       try {
-        const dataUrl = await toPng(container, { cacheBust: true, pixelRatio: 2 });
+        const target = document.getElementById('comparison-table');
+        if (!target) throw new Error('export root not found');
+        const dataUrl = await toPng(target, { cacheBust: true, pixelRatio: 2, backgroundColor: '#0b0b0b' });
         const a = document.createElement('a');
         a.href = dataUrl;
         a.download = `comparison-${timestamp}.png`;
@@ -665,9 +707,35 @@ export default function ComparisonTable() {
         a.click();
         a.remove();
       } catch (err) {
-        console.error('Failed to export image:', err);
-      } finally {
-        container.remove();
+        console.warn('Capture image failed, falling back to markdown render:', err);
+        // Fallback: render markdown and capture hidden container
+        const md = toMarkdown(matrix);
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = '-10000px';
+        container.style.top = '0';
+        container.style.width = '800px';
+        container.style.background = '#0b0b0b';
+        container.style.color = '#ffffff';
+        container.style.padding = '16px';
+        container.innerHTML = `
+          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial;">
+            <pre style="white-space: pre-wrap; font-size: 12px; line-height: 1.4;">${md.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+          </div>`;
+        document.body.appendChild(container);
+        try {
+          const dataUrl = await toPng(container, { cacheBust: true, pixelRatio: 2 });
+          const a = document.createElement('a');
+          a.href = dataUrl;
+          a.download = `comparison-${timestamp}.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } catch (err2) {
+          console.error('Failed to export image:', err2);
+        } finally {
+          container.remove();
+        }
       }
     }
     setIsExportModalOpen(false);
@@ -676,7 +744,7 @@ export default function ComparisonTable() {
   const toggleSortAZ = () => setSortAZ(prev => !prev);
 
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
+    <div id="comparison-export-root" className="fixed inset-0 w-full h-full flex flex-col overflow-y-auto bg-black">
       <div className="w-full px-4 sm:px-6 md:px-12 lg:px-24 pt-5 pb-5">
         <div className="w-full">
           {/* Toolbar Card */}
@@ -814,20 +882,14 @@ export default function ComparisonTable() {
                     <span>Image (.png)</span>
                     <span className="text-white/60">Markdown render capture</span>
                   </button>
-                  <button
-                    onClick={() => exportAs('pdf')}
-                    className="w-full px-4 py-3 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white text-sm text-left flex items-center justify-between"
-                  >
-                    <span>PDF (Print)</span>
-                    <span className="text-white/60">Opens print dialog</span>
-                  </button>
+                  
                 </div>
               </div>
             </div>
           )}
 
           {/* Comparison Table Card */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
+          <div id="comparison-table" className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
             <div className="overflow-x-auto">
               {!mounted ? (
                 <div className="p-8 text-center text-gray-300">Loading…</div>
