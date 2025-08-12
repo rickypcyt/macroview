@@ -131,17 +131,51 @@ export async function getIMF_LURLatestWithYear(iso2: string): Promise<{ value: n
   }
 }
 
+// ISO3 variant: latest unemployment rate from LUR
+export async function getIMF_LURLatestByIso3(iso3: string): Promise<{ value: number | null; year: string | null }> {
+  try {
+    if (!iso3 || iso3.length < 3) return { value: null, year: null };
+    return await getDMIndicatorLatest('LUR', iso3.toUpperCase());
+  } catch (err) {
+    console.error(`IMF DataMapper latest LUR fetch failed for ISO3 ${iso3}:`, err);
+    return { value: null, year: null };
+  }
+}
+
+// ISO3 variant with year cap
+export async function getIMF_LURLatestByIso3UpTo(iso3: string, maxYear: number): Promise<{ value: number | null; year: string | null }> {
+  return getDMIndicatorLatestUpToYear('LUR', iso3.toUpperCase(), maxYear);
+}
+
 // IMF-only latest CPI inflation (% change), IFS PCPIPCH, no WB fallback
-export async function getIMF_IFS_PCPIPCHLatestWithYear(iso2: string): Promise<{ value: number | null; year: string | null }> {
+// IMF-only latest CPI inflation (% change), IFS PCPIEPCH (end-of-period), no WB fallback
+export async function getIMF_IFS_PCPIEPCHLatestWithYear(iso2: string): Promise<{ value: number | null; year: string | null }> {
   try {
     if (!iso2 || iso2.length < 2) return { value: null, year: null };
     const iso3 = await iso2ToIso3(iso2);
     if (!iso3) return { value: null, year: null };
-    return await getDM_IFSInflationLatestWithYear(iso3);
+    // Use generic DataMapper helper to get latest value/year for PCPIEPCH
+    return await getDMIndicatorLatest('PCPIEPCH', iso3);
   } catch (err) {
-    console.error(`IMF DataMapper latest PCPIPCH fetch failed for ${iso2}:`, err);
+    console.error(`IMF DataMapper latest PCPIEPCH fetch failed for ${iso2}:`, err);
     return { value: null, year: null };
   }
+}
+
+// ISO3 variant: latest CPI inflation end-of-period (PCPIEPCH)
+export async function getIMF_IFS_PCPIEPCHLatestByIso3(iso3: string): Promise<{ value: number | null; year: string | null }> {
+  try {
+    if (!iso3 || iso3.length < 3) return { value: null, year: null };
+    return await getDMIndicatorLatest('PCPIEPCH', iso3.toUpperCase());
+  } catch (err) {
+    console.error(`IMF DataMapper latest PCPIEPCH fetch failed for ISO3 ${iso3}:`, err);
+    return { value: null, year: null };
+  }
+}
+
+// ISO3 variant with year cap
+export async function getIMF_IFS_PCPIEPCHLatestByIso3UpTo(iso3: string, maxYear: number): Promise<{ value: number | null; year: string | null }> {
+  return getDMIndicatorLatestUpToYear('PCPIEPCH', iso3.toUpperCase(), maxYear);
 }
 
 // IMF GFS proxy: Taxes on international trade (as % of GDP)
@@ -467,7 +501,7 @@ const ISO2_TO_ISO3: Record<string, string> = {
   ZA: 'ZAF', ZM: 'ZMB', ZW: 'ZWE'
 };
 
-async function iso2ToIso3(iso2: string): Promise<string | null> {
+export async function iso2ToIso3(iso2: string): Promise<string | null> {
   const key = iso2.toUpperCase();
   if (iso3Cache[key]) return iso3Cache[key];
   const iso3 = ISO2_TO_ISO3[key] || null;
@@ -482,6 +516,18 @@ async function iso2ToIso3(iso2: string): Promise<string | null> {
   return iso3;
 }
 
+// Reverse map cache and function (ISO3 -> ISO2)
+const iso2ReverseCache: Record<string, string> = {};
+export function iso3ToIso2(iso3: string): string | null {
+  if (!iso3) return null;
+  const key = iso3.toUpperCase();
+  if (iso2ReverseCache[key]) return iso2ReverseCache[key];
+  const entry = Object.entries(ISO2_TO_ISO3).find(([, v]) => v === key);
+  const iso2 = entry ? entry[0] : null;
+  if (iso2) iso2ReverseCache[key] = iso2;
+  return iso2;
+}
+
 // Generic fetch for a DataMapper indicator returning latest year/value
 async function getDMIndicatorLatest(indicator: string, iso3: string): Promise<{ value: number | null; year: string | null }> {
   if (!iso3 || iso3.length < 3) return { value: null, year: null };
@@ -489,13 +535,18 @@ async function getDMIndicatorLatest(indicator: string, iso3: string): Promise<{ 
     const url = buildDMIndicatorUrl(indicator, iso3.toUpperCase());
     const { data } = await getWithRetry(url, 2);
     const dm = data as Partial<DMResponse> | undefined;
-    const dataset = dm?.data;
-    const countryBlock = dataset ? (dataset[iso3.toUpperCase()] as unknown) : undefined;
-    if (!countryBlock || typeof countryBlock !== 'object') return { value: null, year: null };
-    const years = Object.keys(countryBlock).filter(k => /^\d{4}$/.test(k));
+    // Support both shapes:
+    // 1) { data: { USA: { '1980': -0.3, ... } } }
+    // 2) { values: { INDICATOR: { USA: { '1980': -0.3, ... } } } }
+    const block1 = dm?.data?.[iso3.toUpperCase()] as Record<string, unknown> | undefined;
+    const block2 = dm?.values?.[indicator]?.[iso3.toUpperCase()] as Record<string, unknown> | undefined;
+    const source = block1 || block2;
+    if (!source || typeof source !== 'object') return { value: null, year: null };
+    const years = Object.keys(source).filter(k => /^\d{4}$/.test(k));
     if (years.length === 0) return { value: null, year: null };
-    const latestYear = years.sort().pop() as string;
-    const rawVal = (countryBlock as Record<string, unknown>)[latestYear];
+    years.sort();
+    const latestYear = years[years.length - 1];
+    const rawVal = (source as Record<string, unknown>)[latestYear];
     const num = rawVal != null ? Number(rawVal) : null;
     return { value: isFinite(Number(num)) ? Number(num) : null, year: latestYear };
   } catch (err) {
@@ -508,9 +559,22 @@ async function getDM_WEOGDPGrowthLatest(iso3: string): Promise<{ value: number |
   return getDMIndicatorLatest('NGDP_RPCH', iso3);
 }
 
-async function getDM_IFSInflationLatestWithYear(iso3: string): Promise<{ value: number | null; year: string | null }> {
-  return getDMIndicatorLatest('PCPIPCH', iso3);
+// ISO3 WEO GDP growth with year cap
+export async function getWEOGDPGrowthLatestByIso3UpTo(iso3: string, maxYear: number): Promise<{ value: number | null; year: string | null }> {
+  return getDMIndicatorLatestUpToYear('NGDP_RPCH', iso3, maxYear);
 }
+
+// ISO3 variant for latest Real GDP growth (NGDP_RPCH) via DataMapper
+export async function getWEOGDPGrowthLatestByIso3(iso3: string): Promise<{ value: number | null; year: string | null }> {
+  if (!iso3 || iso3.length < 3) return { value: null, year: null };
+  try {
+    return await getDM_WEOGDPGrowthLatest(iso3.toUpperCase());
+  } catch {
+    return { value: null, year: null };
+  }
+}
+
+// Note: legacy helper for PCPIPCH removed in favor of direct calls to getDMIndicatorLatest('PCPIEPCH')
 
 // Fetch specific year for an IMF DataMapper indicator
 export async function getIMF_PCPIPCHForYearByIso3(
