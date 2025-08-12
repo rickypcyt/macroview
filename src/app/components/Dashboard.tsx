@@ -3,7 +3,7 @@
 import type * as GeoJSON from "geojson";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { getCachedGlobalWEO_GDP, getIMF_Inflation2025WithFallbackByIso2 } from "../utils/imfApi";
+import { getIMF_Inflation2025WithFallbackByIso2 } from "../utils/imfApi";
 
 import { DataSourcesCard } from "./DataSourcesCard";
 import { GlobalStatsSidebar } from "./GlobalStatsSidebar";
@@ -69,20 +69,28 @@ export function Dashboard({
     error: null
   });
 
-  // Obtener el PIB global al montar el componente
+  // Obtener el PIB global (World Bank WLD aggregate)
   useEffect(() => {
     const fetchGlobalGDP = async () => {
       try {
         setGlobalGDP(prev => ({ ...prev, loading: true, error: null }));
-        // IMF WEO (NGDPD) for WLD aggregate
-        const imfRes = await getCachedGlobalWEO_GDP();
-        setGlobalGDP({
-          value: imfRes.value,
-          year: imfRes.year,
-          source: imfRes.source,
-          loading: false,
-          error: null
-        });
+        // World Bank: NY.GDP.MKTP.CD (current US$) for WLD aggregate, latest non-null value
+        const res = await fetch('https://api.worldbank.org/v2/country/WLD/indicator/NY.GDP.MKTP.CD?format=json&per_page=60');
+        const json = await res.json();
+        type WBPoint = { date?: string; value: number | null };
+        const series: WBPoint[] = Array.isArray(json) && Array.isArray(json[1]) ? (json[1] as WBPoint[]) : [];
+        const latest = series.find((d: WBPoint) => d && d.value != null);
+        if (latest && typeof latest.value === 'number') {
+          setGlobalGDP({
+            value: latest.value as number,
+            year: latest.date ? String(latest.date) : null,
+            source: 'World Bank',
+            loading: false,
+            error: null
+          });
+        } else {
+          setGlobalGDP(prev => ({ ...prev, loading: false, error: 'No GDP data available' }));
+        }
       } catch (error) {
         setGlobalGDP(prev => ({
           ...prev,
@@ -138,13 +146,17 @@ export function Dashboard({
     distributionData: { countryName: string; inflation: number }[];
     loading: boolean;
     error: string | null;
+    year: string | null;
+    countryCount: number | null;
   }>({
     average: null,
     highest: null,
     lowest: null,
     distributionData: [],
     loading: true,
-    error: null
+    error: null,
+    year: null,
+    countryCount: null,
   });
 
   // Estados para país seleccionado
@@ -179,19 +191,22 @@ export function Dashboard({
     year: null
   });
 
-  // Función para cargar datos de inflación globales (World Bank primero para promedio rápido; distribución en segundo plano)
+  // Función para cargar datos de inflación globales (World Bank WLD + distribución por países)
   async function loadGlobalInflationData() {
-    // Paso 1: obtener promedio global rápido desde WLD (World aggregate)
+    // Paso 1: obtener promedio global y año desde WLD (World aggregate)
     try {
-      const wldRes = await fetch('https://api.worldbank.org/v2/country/WLD/indicator/FP.CPI.TOTL.ZG?format=json&per_page=1');
+      const wldRes = await fetch('https://api.worldbank.org/v2/country/WLD/indicator/FP.CPI.TOTL.ZG?format=json&per_page=60');
       const wldJson = await wldRes.json();
-      const series = Array.isArray(wldJson) && Array.isArray(wldJson[1]) ? wldJson[1] : [];
-      const latest = series && series[0] && typeof series[0].value === 'number' ? series[0] : null;
-      const avg = latest ? (latest.value as number) : null;
+      type WBPoint = { date?: string; value: number | null };
+      const series: WBPoint[] = Array.isArray(wldJson) && Array.isArray(wldJson[1]) ? (wldJson[1] as WBPoint[]) : [];
+      const latest = series.find((d: WBPoint) => d && d.value != null);
+      const avg = latest && typeof latest.value === 'number' ? (latest.value as number) : null;
+      const year = latest && latest.date ? String(latest.date) : null;
 
       setGlobalInflationStats(prev => ({
         ...prev,
         average: avg,
+        year,
         loading: false,
         error: null
       }));
@@ -200,29 +215,40 @@ export function Dashboard({
       setGlobalInflationStats(prev => ({ ...prev, loading: false }));
     }
 
-    // Paso 2 (background): cargar distribución/altos/bajos (puede tardar más)
+    // Paso 2 (background): calcular distribución/altos/bajos y conteo de países para el último año disponible
     try {
-      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=2022');
+      // Buscar valores por país para años recientes y tomar el más reciente con datos
+      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/FP.CPI.TOTL.ZG?format=json&per_page=200&date=2019:2025');
       const data = await response.json();
 
       if (Array.isArray(data) && Array.isArray(data[1])) {
-        interface WbIndicatorItem { value: number | null }
-        const inflationValues = (data[1] as WbIndicatorItem[])
-          .map(item => (item && typeof item.value === 'number') ? item.value : null)
-          .filter((v): v is number => v !== null);
-
-        if (inflationValues.length > 0) {
-          const highestVal = Math.max(...inflationValues);
-          const lowestVal = Math.min(...inflationValues);
+        interface Row { country?: { value?: string }; date?: string; value: number | null }
+        const rows = data[1] as Row[];
+        // agrupar por año y elegir el año más reciente con suficientes datos
+        const byYear: Record<string, number[]> = {};
+        for (const r of rows) {
+          if (r.date && r.value != null && !isNaN(r.value)) {
+            const y = String(r.date);
+            (byYear[y] ||= []).push(r.value as number);
+          }
+        }
+        const years = Object.keys(byYear).sort((a,b) => Number(b) - Number(a));
+        const chosenYear = years[0];
+        const values = chosenYear ? byYear[chosenYear] : [];
+        if (values.length > 0) {
+          const highestVal = Math.max(...values);
+          const lowestVal = Math.min(...values);
           const highest = { country: 'Highest', value: highestVal };
           const lowest = { country: 'Lowest', value: lowestVal };
-          const distributionData = inflationValues.slice(0, 100).map((v, idx) => ({ countryName: `#${idx+1}`, inflation: v }));
+          const distributionData = values.slice(0, 100).map((v, idx) => ({ countryName: `#${idx+1}`, inflation: v }));
 
           setGlobalInflationStats(prev => ({
             ...prev,
             highest,
             lowest,
             distributionData,
+            countryCount: values.length,
+            year: prev.year ?? chosenYear ?? null,
           }));
         }
       }
@@ -290,36 +316,29 @@ export function Dashboard({
     }
   }, [selectedCountryFromSearch, loadSelectedCountryData]);
 
-  // Función para cargar datos de flujos comerciales globales
+  // Función para cargar datos de flujos comerciales globales (World Bank WLD aggregate)
   async function loadGlobalTradeData() {
     setGlobalTradeStats(prev => ({ ...prev, loading: true }));
     try {
-      // Usar World Bank API para datos de comercio (TG.VAL.TOTL.GD.ZS - Trade as % of GDP)
-      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/TG.VAL.TOTL.GD.ZS?format=json&per_page=200&date=2021');
+      const response = await fetch('https://api.worldbank.org/v2/country/WLD/indicator/TG.VAL.TOTL.GD.ZS?format=json&per_page=60');
       const data = await response.json();
-      
-      if (Array.isArray(data) && Array.isArray(data[1])) {
-        interface WbIndicatorItem { value: number | null }
-        const tradeValues = (data[1] as WbIndicatorItem[])
-          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > 0)
-          .map((item: WbIndicatorItem) => item.value as number);
-        
-        if (tradeValues.length > 0) {
-          const average = tradeValues.reduce((sum, val) => sum + val, 0) / tradeValues.length;
-          setGlobalTradeStats({
-            loading: false,
-            value: average,
-            error: null,
-            year: '2021'
-          });
-        } else {
-          setGlobalTradeStats({
-            loading: false,
-            value: null,
-            error: 'No trade data available',
-            year: null
-          });
-        }
+      type WBPoint = { date?: string; value: number | null };
+      const series: WBPoint[] = Array.isArray(data) && Array.isArray(data[1]) ? (data[1] as WBPoint[]) : [];
+      const latest = series.find((d: WBPoint) => d && d.value != null);
+      if (latest && typeof latest.value === 'number') {
+        setGlobalTradeStats({
+          loading: false,
+          value: latest.value as number,
+          error: null,
+          year: latest.date ? String(latest.date) : null
+        });
+      } else {
+        setGlobalTradeStats({
+          loading: false,
+          value: null,
+          error: 'No trade data available',
+          year: null
+        });
       }
     } catch (error) {
       console.error('Error loading global trade data:', error);
@@ -332,36 +351,56 @@ export function Dashboard({
     }
   }
 
-  // Función para cargar datos de deuda externa global
+  // Función para cargar datos de deuda externa global (World Bank WLD aggregate)
   async function loadGlobalDebtData() {
     setGlobalDebtStats(prev => ({ ...prev, loading: true }));
     try {
-      // Usar World Bank API para datos de deuda externa (DT.DOD.DECT.CD - External debt stocks)
-      const response = await fetch('https://api.worldbank.org/v2/country/all/indicator/DT.DOD.DECT.CD?format=json&per_page=200&date=2021');
+      const response = await fetch('https://api.worldbank.org/v2/country/WLD/indicator/DT.DOD.DECT.CD?format=json&per_page=60');
       const data = await response.json();
-      
-      if (Array.isArray(data) && Array.isArray(data[1])) {
-        interface WbIndicatorItem { value: number | null }
-        const debtValues = (data[1] as WbIndicatorItem[])
-          .filter((item: WbIndicatorItem) => item.value !== null && !isNaN(item.value as number) && (item.value as number) > 0)
-          .map((item: WbIndicatorItem) => item.value as number);
-        
-        if (debtValues.length > 0) {
-          const totalDebt = debtValues.reduce((sum, val) => sum + val, 0);
-          setGlobalDebtStats({
-            loading: false,
-            value: totalDebt,
-            error: null,
-            year: '2021'
-          });
-        } else {
-          setGlobalDebtStats({
-            loading: false,
-            value: null,
-            error: 'No debt data available',
-            year: null
-          });
+      type WBPoint = { date?: string; value: number | null };
+      const series: WBPoint[] = Array.isArray(data) && Array.isArray(data[1]) ? (data[1] as WBPoint[]) : [];
+      const latest = series.find((d: WBPoint) => d && d.value != null);
+
+      // Fallback: aggregate country-level totals if WLD is missing/null
+      if (!(latest && typeof latest.value === 'number')) {
+        try {
+          const respAll = await fetch('https://api.worldbank.org/v2/country/all/indicator/DT.DOD.DECT.CD?format=json&per_page=20000&date=2015:2025');
+          const jsonAll = await respAll.json();
+          type Row = { date?: string; value: number | null };
+          const rows: Row[] = Array.isArray(jsonAll) && Array.isArray(jsonAll[1]) ? (jsonAll[1] as Row[]) : [];
+          const byYear: Record<string, number> = {};
+          for (const r of rows) {
+            if (r.date && r.value != null && !isNaN(r.value)) {
+              const y = String(r.date);
+              byYear[y] = (byYear[y] || 0) + (r.value as number);
+            }
+          }
+          const years = Object.keys(byYear).sort((a, b) => Number(b) - Number(a));
+          if (years.length) {
+            const y0 = years[0];
+            const sumVal = byYear[y0];
+            setGlobalDebtStats({ loading: false, value: sumVal, error: null, year: y0 });
+            return;
+          }
+        } catch (aggErr) {
+          console.warn('Debt aggregation fallback failed:', aggErr);
         }
+      }
+
+      if (latest && typeof latest.value === 'number') {
+        setGlobalDebtStats({
+          loading: false,
+          value: latest.value as number,
+          error: null,
+          year: latest.date ? String(latest.date) : null
+        });
+      } else {
+        setGlobalDebtStats({
+          loading: false,
+          value: null,
+          error: 'No debt data available',
+          year: null
+        });
       }
     } catch (error) {
       console.error('Error loading global debt data:', error);

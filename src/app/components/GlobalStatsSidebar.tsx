@@ -17,6 +17,8 @@ interface GlobalInflationStatsState {
   distributionData: { countryName: string; inflation: number }[];
   loading: boolean;
   error: string | null;
+  year: string | null;
+  countryCount: number | null;
 }
 
 interface GlobalSimpleStatState {
@@ -72,11 +74,11 @@ export function GlobalStatsSidebar({
                 globalInflationStats.average !== null ? `${globalInflationStats.average.toFixed(2)}%` : 'Not available'}
           </div>
           <div className="text-sm text-gray-400 mt-1 sm:mt-2">
-            World Bank - Consumer Price Index (2022)
+            World Bank - Consumer Price Index ({globalInflationStats.year || '...'})
           </div>
-          {globalInflationStats.distributionData.length > 0 && (
+          {(globalInflationStats.countryCount ?? globalInflationStats.distributionData.length) > 0 && (
             <div className="text-sm text-gray-400 mt-1 sm:mt-2">
-              Based on {globalInflationStats.distributionData.length} countries
+              Based on {globalInflationStats.countryCount ?? globalInflationStats.distributionData.length} countries
             </div>
           )}
           {globalInflationStats.error && (
@@ -98,7 +100,7 @@ export function GlobalStatsSidebar({
                 globalTradeStats.value !== null ? `${globalTradeStats.value.toFixed(1)}%` : 'Not available'}
           </div>
           <div className="text-sm text-gray-400 mt-1 sm:mt-2">
-            World Bank - Trade as % of GDP (2021)
+            World Bank - Trade as % of GDP ({globalTradeStats.year || '...'})
           </div>
           {globalTradeStats.error && (
             <div className="text-sm text-red-400 mt-1 sm:mt-2">
@@ -119,7 +121,7 @@ export function GlobalStatsSidebar({
                 globalDebtStats.value !== null ? `$${(globalDebtStats.value / 1e12).toFixed(2)}T` : 'Not available'}
           </div>
           <div className="text-sm text-gray-400 mt-1 sm:mt-2">
-            World Bank - External Debt Stocks (2021)
+            World Bank - External Debt Stocks ({globalDebtStats.year || '...'})
           </div>
           {globalDebtStats.error && (
             <div className="text-sm text-red-400 mt-1 sm:mt-2">
