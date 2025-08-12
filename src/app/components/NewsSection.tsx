@@ -149,13 +149,13 @@ export function NewsSection() {
                           {item.title}
                         </h4>
                         {item.description && (
-                          <p className="text-gray-400 text-xs leading-relaxed line-clamp-2">
+                          <p className="text-gray-400 text-sm leading-relaxed line-clamp-2">
                             {item.description}
                           </p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                    <div className="flex items-center justify-between text-sm text-gray-400 mt-2">
                       <span className="flex items-center gap-1">
                         <span className="text-blue-400">📰</span>
                         {item.source}

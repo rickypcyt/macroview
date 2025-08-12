@@ -1,12 +1,12 @@
 "use client";
 
 import * as XLSX from 'xlsx';
-import { Info } from 'lucide-react';
 
 import { getIMF_IFS_PCPIEPCHLatestByIso3UpTo, getIMF_LURLatestByIso3UpTo, getWEOGDPGrowthLatestByIso3UpTo, iso2ToIso3, iso3ToIso2 } from '../utils/imfApi';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Fuse from 'fuse.js';
+import { Info } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
 // import { loadCountryGDP } from '../utils/dataService';
@@ -842,7 +842,7 @@ export default function ComparisonTable() {
               <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-white font-semibold text-base sm:text-lg">Search results</h2>
-                  <span className="text-xs sm:text-sm text-gray-300">{filteredCountries.length} found</span>
+                  <span className="text-sm sm:text-sm text-gray-300">{filteredCountries.length} found</span>
                 </div>
                 <div className="divide-y divide-white/10 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-white/5">
                   {filteredCountries.map((country, index) => (
@@ -864,7 +864,7 @@ export default function ComparisonTable() {
                           <div className="text-sm text-gray-400">{country.iso3Code}{country.iso2Code ? ` • ${country.iso2Code}` : ''}</div>
                         </div>
                         <div className="shrink-0">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-400/30">Add</span>
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-500/20 text-blue-300 border border-blue-400/30">Add</span>
                         </div>
                       </div>
                     </button>
@@ -960,7 +960,7 @@ export default function ComparisonTable() {
                   <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[180px] text-base relative">
                     <div className="flex items-start">
                       <span className="inline-block w-3 h-3" aria-hidden="true"></span>
-                      <span className="flex-1 block text-center text-xs sm:text-sm leading-tight">
+                      <span className="flex-1 block text-center text-sm sm:text-sm leading-tight">
                         {indicator.includes(' (') ? (
                           <>
                             <span className="block">{indicator.slice(0, indicator.indexOf(' ('))}</span>

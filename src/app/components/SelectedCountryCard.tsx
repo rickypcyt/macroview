@@ -3,10 +3,10 @@
 import type * as GeoJSON from "geojson";
 
 import React, { useEffect, useState } from "react";
-import { Info } from 'lucide-react';
 import { getIMF_LPForYearByIso3, getIMF_LPLatestByIso3, getIMF_NGDPDForYearByIso3, getIMF_NGDPDLatestByIso3 } from "../utils/imfApi";
 import { loadCountryGDP, loadCountryPopulationIMF } from "../utils/dataService";
 
+import { Info } from 'lucide-react';
 import { normalizeCountryName } from "../utils/helpers";
 
 interface SelectedCountryCardProps {
@@ -196,7 +196,7 @@ export function SelectedCountryCard({
                   <span className="text-gray-400">Not available</span>
                 )}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF DataMapper - LP {popYear ? `(${popYear})` : '(2025)'} </div>
+              <div className="text-[10px] sm:text-sm text-gray-400 mt-1 sm:mt-2">IMF DataMapper - LP {popYear ? `(${popYear})` : '(2025)'} </div>
             </div>
 
             {/* Continent */}
@@ -218,7 +218,7 @@ export function SelectedCountryCard({
                   <button className="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200">
                     <Info className="w-4 h-4" />
                   </button>
-                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-xs sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-sm sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
                     <p className="font-medium text-white mb-1">💡 What is GDP?</p>
                     <p>
                       Gross domestic product is the most commonly used single measure of a country&#39;s overall economic activity. It represents the total value at current prices of final goods and services produced within a country during a specified time period, such as one year.
@@ -238,7 +238,7 @@ export function SelectedCountryCard({
                   <span className="text-gray-400">Not available</span>
                 )}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF DataMapper - NGDPD {gdpYear ? `(${gdpYear})` : ''} </div>
+              <div className="text-[10px] sm:text-sm text-gray-400 mt-1 sm:mt-2">IMF DataMapper - NGDPD {gdpYear ? `(${gdpYear})` : ''} </div>
             </div>
 
             {/* Inflation */}
@@ -249,7 +249,7 @@ export function SelectedCountryCard({
                   <button className="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200">
                     <Info className="w-4 h-4" />
                   </button>
-                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-xs sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-sm sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
                     <p className="font-medium text-white mb-1">💡 What is CPI/Inflation?</p>
                     <p>
                       The average consumer price index (CPI) is a measure of a country&#39;s average level of prices based on the cost of a typical basket of consumer goods and services in a given period. The rate of inflation is the percent change in the average CPI.
@@ -267,7 +267,7 @@ export function SelectedCountryCard({
                   <span className="text-gray-400">Not available</span>
                 )}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 mt-1 sm:mt-2">IMF IFS - CPI inflation (PCPIPCH)</div>
+              <div className="text-[10px] sm:text-sm text-gray-400 mt-1 sm:mt-2">IMF IFS - CPI inflation (PCPIPCH)</div>
             </div>
           </div>
         </div>

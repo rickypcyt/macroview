@@ -1,10 +1,11 @@
 "use client";
 
+import type * as GeoJSON from "geojson";
+
 import { CONTINENTS_EN, CONTINENT_COLORS, CONTINENT_NAME_MAP, COUNTRIES_PER_CONTINENT } from "../utils/helpers";
 import React, { useRef, useState } from "react";
 
 import { CountryInfoPopup } from "./CountryInfoPopup";
-import type * as GeoJSON from "geojson";
 import GlobeImport from "react-globe.gl";
 
 type GlobeLabel = { lat: number; lng: number; text: string; isCountry?: boolean; isContinent?: boolean; bgColor?: string; color?: string; size?: number; };
@@ -234,7 +235,7 @@ export function Globe3D({ countries, popByCountry, normalizeCountryName, onConti
           </div>
         ))}
       </div>
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400 mt-2 z-[1000]">Source of countries: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-sm text-gray-400 mt-2 z-[1000]">Source of countries: <a href="https://datahub.io/core/geo-countries" target="_blank" rel="noopener noreferrer" className="underline">datahub.io/core/geo-countries</a></div>
     </div>
   );
 } 

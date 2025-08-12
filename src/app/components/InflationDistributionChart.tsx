@@ -100,7 +100,7 @@ export function InflationDistributionChart({ inflationData }: InflationDistribut
           <div key={idx} className={`text-center p-4 ${range.bgColor} rounded-xl border border-white/10`}>
             <div className="text-base font-medium text-gray-300 mb-2 flex items-center justify-center gap-2">
               <span className="text-lg">{range.icon}</span>
-              <span className="text-xs md:text-sm">{range.label}</span>
+              <span className="text-sm md:text-sm">{range.label}</span>
             </div>
             <div className={`text-2xl md:text-3xl font-bold`} style={{ color: range.color }}>
               {range.count}

@@ -47,19 +47,19 @@ export function NewsCacheManager() {
           <div className={`text-2xl font-bold ${getUsageColor()}`}>
             {stats.dailyRequestCount}
           </div>
-          <div className="text-xs text-gray-400">Requests hoy</div>
+          <div className="text-sm text-gray-400">Requests hoy</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-green-300">
             {stats.totalCachedCategories}
           </div>
-          <div className="text-xs text-gray-400">Categorías en caché</div>
+          <div className="text-sm text-gray-400">Categorías en caché</div>
         </div>
       </div>
 
       {/* Progress bar */}
       <div className="mb-4">
-        <div className="flex justify-between text-xs text-gray-400 mb-1">
+        <div className="flex justify-between text-sm text-gray-400 mb-1">
           <span>Uso diario</span>
           <span>{getUsagePercentage()}%</span>
         </div>
@@ -69,7 +69,7 @@ export function NewsCacheManager() {
             style={{ width: `${Math.min(getUsagePercentage(), 100)}%` }}
           ></div>
         </div>
-        <div className="text-xs text-gray-500 mt-1">
+        <div className="text-sm text-gray-500 mt-1">
           Máximo {stats.maxDailyRequests} requests por día
         </div>
       </div>
@@ -116,7 +116,7 @@ export function NewsCacheManager() {
       </div>
 
       {/* Info */}
-      <div className="mt-4 text-xs text-gray-500 space-y-1">
+      <div className="mt-4 text-sm text-gray-500 space-y-1">
         <p>• El caché se limpia automáticamente cada 24 horas</p>
         <p>• Los datos se almacenan localmente en tu navegador</p>
         <p>• Limpiar el caché forzará nuevas consultas a la API</p>

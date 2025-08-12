@@ -11,9 +11,9 @@ import {
   Title,
   Tooltip
 } from 'chart.js';
-import { Info } from 'lucide-react';
 import React, { useEffect, useState } from "react";
 
+import { Info } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 
 ChartJS.register(
@@ -381,7 +381,7 @@ export function HistoricalLog() {
               <p className="text-gray-400 text-sm">Last {timePeriod} years • Hover over points for details</p>
             </div>
             {renderChart()}
-            <p className="text-gray-500 text-xs mt-2 text-center">
+            <p className="text-gray-500 text-sm mt-2 text-center">
               Source: {activeTab === 'inflation' ? 'World Bank (FP.CPI.TOTL.ZG)' : (sources.gdp ?? 'World Bank (NY.GDP.MKTP.CD)')}
             </p>
           </div>
@@ -403,7 +403,7 @@ export function HistoricalLog() {
             <div className={`text-xl font-bold ${activeColor}`}>
               {activeTab === 'gdp' ? formatGDP(activeHistory[activeHistory.length - 1].value) : `${activeHistory[activeHistory.length - 1].value.toFixed(2)}%`}
             </div>
-            <div className="text-gray-500 text-xs">{activeHistory[activeHistory.length - 1].year}</div>
+            <div className="text-gray-500 text-sm">{activeHistory[activeHistory.length - 1].year}</div>
           </div>
           
           <div className="p-4 bg-white/5 rounded-xl border border-white/10">
@@ -414,7 +414,7 @@ export function HistoricalLog() {
                 return activeTab === 'gdp' ? formatGDP(avg) : `${avg.toFixed(2)}%`;
               })()}
             </div>
-            <div className="text-gray-500 text-xs">Last {timePeriod} years</div>
+            <div className="text-gray-500 text-sm">Last {timePeriod} years</div>
           </div>
           
           <div className="p-4 bg-white/5 rounded-xl border border-white/10">
@@ -433,7 +433,7 @@ export function HistoricalLog() {
                 return `${change.isPositive ? '+' : ''}${change.percentage.toFixed(1)}%`;
               })()}
             </div>
-            <div className="text-gray-500 text-xs">vs {activeHistory[0].year}</div>
+            <div className="text-gray-500 text-sm">vs {activeHistory[0].year}</div>
           </div>
         </div>
       )}

@@ -1,12 +1,13 @@
 "use client";
 
+import type * as GeoJSON from "geojson";
+
 import type { LatLngBoundsExpression, LatLngExpression, LeafletEvent } from "leaflet";
 import { GeoJSON as LeafletGeoJSON, MapContainer as LeafletMap, useMap, useMapEvents } from "react-leaflet";
 import React, { useEffect, useState } from "react";
 
 import { CONTINENTS_EN } from "../utils/helpers";
 import { CountryInfoPopup } from "./CountryInfoPopup";
-import type * as GeoJSON from "geojson";
 
 interface Globe2DProps {
   geojson: GeoJSON.FeatureCollection;
@@ -110,7 +111,7 @@ function CountryLabels2D({ geojson, zoom }: { geojson: GeoJSON.FeatureCollection
         return (
           <div
             key={feature.properties?.name || feature.id}
-            className="absolute pointer-events-none select-none text-xs font-bold text-white bg-black/60 rounded px-2 py-1 shadow"
+            className="absolute pointer-events-none select-none text-sm font-bold text-white bg-black/60 rounded px-2 py-1 shadow"
             style={{
               left: point.x,
               top: point.y,
@@ -237,7 +238,7 @@ export function Globe2D({ geojson, popByCountry, normalizeCountryName, gdpByCoun
       {hoveredCountry && hoverPos && !selectedCountry &&
         !(geojson.features.some(f => f.properties?.name === hoveredCountry)) && (
         <div
-          className="fixed z-[2000] px-3 py-1 rounded bg-white/90 text-black text-xs font-bold pointer-events-none shadow"
+          className="fixed z-[2000] px-3 py-1 rounded bg-white/90 text-black text-sm font-bold pointer-events-none shadow"
           style={{ left: hoverPos.x + 12, top: hoverPos.y + 4 }}
         >
           {hoveredCountry}

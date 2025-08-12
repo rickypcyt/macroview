@@ -24,7 +24,7 @@ export function DataSourcesCard() {
               <div className="flex flex-col items-center text-center">
                 <div className="text-2xl mb-2">🌍</div>
                 <h3 className="font-medium text-gray-200">World Bank</h3>
-                <p className="text-xs text-gray-400 mt-1">Open Data</p>
+                <p className="text-sm text-gray-400 mt-1">Open Data</p>
               </div>
             </a>
 
@@ -38,7 +38,7 @@ export function DataSourcesCard() {
               <div className="flex flex-col items-center text-center">
                 <div className="text-2xl mb-2">📈</div>
                 <h3 className="font-medium text-gray-200">IMF</h3>
-                <p className="text-xs text-gray-400 mt-1">World Economic Outlook</p>
+                <p className="text-sm text-gray-400 mt-1">World Economic Outlook</p>
               </div>
             </a>
 
@@ -52,13 +52,13 @@ export function DataSourcesCard() {
               <div className="flex flex-col items-center text-center">
                 <div className="text-2xl mb-2">📰</div>
                 <h3 className="font-medium text-gray-200">NewsAPI</h3>
-                <p className="text-xs text-gray-400 mt-1">News Headlines</p>
+                <p className="text-sm text-gray-400 mt-1">News Headlines</p>
               </div>
             </a>
           </div>
 
           <div className="mt-6 text-center">
-            <p className="text-xs text-gray-400">Data is cached for performance and may be delayed</p>
+            <p className="text-sm text-gray-400">Data is cached for performance and may be delayed</p>
           </div>
         </div>
       </div>
