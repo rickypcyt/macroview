@@ -3,6 +3,7 @@
 import type * as GeoJSON from "geojson";
 
 import React, { useEffect, useState } from "react";
+import { Info } from 'lucide-react';
 import { getIMF_LPForYearByIso3, getIMF_LPLatestByIso3, getIMF_NGDPDForYearByIso3, getIMF_NGDPDLatestByIso3 } from "../utils/imfApi";
 import { loadCountryGDP, loadCountryPopulationIMF } from "../utils/dataService";
 
@@ -210,7 +211,21 @@ export function SelectedCountryCard({
           {/* Additional Info Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* GDP (IMF NGDPD - selected year or latest) */}
-            <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10 relative">
+              {/* Info icon + tooltip (GDP) */}
+              <div className="absolute top-2 right-2 z-10">
+                <div className="group relative">
+                  <button className="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200">
+                    <Info className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-xs sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                    <p className="font-medium text-white mb-1">💡 What is GDP?</p>
+                    <p>
+                      Gross domestic product is the most commonly used single measure of a country&#39;s overall economic activity. It represents the total value at current prices of final goods and services produced within a country during a specified time period, such as one year.
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">💰 GDP (billions USD)</div>
               <div className="text-base sm:text-lg md:text-xl font-bold text-green-400">
                 {gdpLoading || selectedCountryGDPLoading ? (
@@ -227,7 +242,21 @@ export function SelectedCountryCard({
             </div>
 
             {/* Inflation */}
-            <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10">
+            <div className="text-center p-3 sm:p-4 bg-white/5 rounded-xl border border-white/10 relative">
+              {/* Info icon + tooltip (Inflation) */}
+              <div className="absolute top-2 right-2 z-10">
+                <div className="group relative">
+                  <button className="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-all duration-200">
+                    <Info className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-8 right-0 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-4 text-xs sm:text-sm text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                    <p className="font-medium text-white mb-1">💡 What is CPI/Inflation?</p>
+                    <p>
+                      The average consumer price index (CPI) is a measure of a country&#39;s average level of prices based on the cost of a typical basket of consumer goods and services in a given period. The rate of inflation is the percent change in the average CPI.
+                    </p>
+                  </div>
+                </div>
+              </div>
               <div className="text-sm sm:text-base md:text-lg text-gray-300 font-semibold mb-1 sm:mb-2">📈 Inflation (%)</div>
               <div className="text-base sm:text-lg md:text-xl font-bold text-yellow-400">
                 {selectedCountryInflationLoading ? (

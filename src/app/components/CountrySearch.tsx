@@ -88,7 +88,7 @@ export function CountrySearch({ countries, gdpByCountry, popByCountry, inflation
     }
 
     const result = [...exactMatches, ...partialMatches].slice(0, 50);
-    setActiveIndex(-1);
+    setActiveIndex(result.length ? 0 : -1);
     return result;
   }, [query, countries]);
 
@@ -106,8 +106,9 @@ export function CountrySearch({ countries, gdpByCountry, popByCountry, inflation
         break;
       case 'Enter':
         e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < filtered.length) {
-          handleCountryClick(filtered[activeIndex]);
+        if (filtered.length) {
+          const idx = activeIndex >= 0 && activeIndex < filtered.length ? activeIndex : 0;
+          handleCountryClick(filtered[idx]);
         }
         break;
     }

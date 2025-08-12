@@ -1,10 +1,13 @@
 "use client";
 
+import * as XLSX from 'xlsx';
+import { Info } from 'lucide-react';
+
+import { getIMF_IFS_PCPIEPCHLatestByIso3UpTo, getIMF_LURLatestByIso3UpTo, getWEOGDPGrowthLatestByIso3UpTo, iso2ToIso3, iso3ToIso2 } from '../utils/imfApi';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Fuse from 'fuse.js';
 import { toPng } from 'html-to-image';
-import { iso2ToIso3, iso3ToIso2, getWEOGDPGrowthLatestByIso3UpTo, getIMF_LURLatestByIso3UpTo, getIMF_IFS_PCPIEPCHLatestByIso3UpTo } from '../utils/imfApi';
 
 // import { loadCountryGDP } from '../utils/dataService';
 
@@ -114,6 +117,7 @@ export default function ComparisonTable() {
   const [debouncedTerm, setDebouncedTerm] = useState('');
   const [filteredCountries, setFilteredCountries] = useState<SearchCountry[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
   // Global blocking overlay removed; we use per-country mini loaders
   // Track which countries are currently fetching indicators
   const [loadingCountries, setLoadingCountries] = useState<string[]>([]);
@@ -217,6 +221,15 @@ export default function ComparisonTable() {
     const id = setTimeout(() => setDebouncedTerm(searchTerm), 250);
     return () => clearTimeout(id);
   }, [searchTerm]);
+
+  // When results update, highlight the first by default
+  useEffect(() => {
+    if (filteredCountries.length > 0) {
+      setSelectedIndex(0);
+    } else {
+      setSelectedIndex(-1);
+    }
+  }, [filteredCountries]);
 
   // Build Fuse index when countries change
   const fuse = useMemo(() => {
@@ -357,10 +370,15 @@ export default function ComparisonTable() {
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedIndex >= 0 && selectedIndex < filteredCountries.length) {
-          addCountry(filteredCountries[selectedIndex]);
-          setSearchTerm('');
-          setSelectedIndex(-1);
+        {
+          const idx = (selectedIndex >= 0 && selectedIndex < filteredCountries.length) ? selectedIndex : (filteredCountries.length > 0 ? 0 : -1);
+          if (idx >= 0) {
+            addCountry(filteredCountries[idx]);
+            setSearchTerm('');
+            setSelectedIndex(-1);
+            // Keep typing flow: refocus input
+            inputRef.current?.focus();
+          }
         }
         break;
       case 'Escape':
@@ -685,12 +703,24 @@ export default function ComparisonTable() {
     URL.revokeObjectURL(url);
   };
 
-  const exportAs = async (format: 'markdown' | 'csv' | 'image') => {
+  const exportAs = async (format: 'markdown' | 'csv' | 'image' | 'excel') => {
     const matrix = buildExportMatrix();
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     if (format === 'csv') {
       const csv = toCsv(matrix);
       downloadFile(csv, `comparison-${timestamp}.csv`, 'text/csv;charset=utf-8');
+    } else if (format === 'excel') {
+      // Build a workbook using SheetJS and trigger download as .xlsx
+      try {
+        const ws = XLSX.utils.aoa_to_sheet(matrix);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Comparison');
+        XLSX.writeFile(wb, `comparison-${timestamp}.xlsx`, { bookType: 'xlsx' });
+      } catch (err) {
+        console.error('Failed to export Excel, falling back to CSV:', err);
+        const csv = toCsv(matrix);
+        downloadFile(csv, `comparison-${timestamp}.csv`, 'text/csv;charset=utf-8');
+      }
     } else if (format === 'markdown') {
       const md = toMarkdown(matrix);
       downloadFile(md, `comparison-${timestamp}.md`, 'text/markdown;charset=utf-8');
@@ -761,6 +791,7 @@ export default function ComparisonTable() {
                     type="text"
                     placeholder="🔍 Add country to table..."
                     value={searchTerm}
+                    ref={inputRef}
                     onChange={(e) => {
                       const v = e.target.value;
                       setSearchTerm(v);
@@ -810,7 +841,7 @@ export default function ComparisonTable() {
 
           {/* Search Results Card */}
           {filteredCountries.length > 0 && (
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden pb-5">
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 overflow-hidden pb-5 mb-6">
               <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-white font-semibold text-base sm:text-lg">Search results</h2>
@@ -824,6 +855,7 @@ export default function ComparisonTable() {
                         addCountry(country);
                         setSearchTerm('');
                         setSelectedIndex(-1);
+                        inputRef.current?.focus();
                       }}
                       className={`w-full px-4 sm:px-5 py-3 sm:py-4 text-left transition-colors focus:outline-none focus:bg-white/15 ${
                         index === selectedIndex ? 'bg-blue-600/40 text-white' : 'hover:bg-white/10 text-white'
@@ -862,11 +894,18 @@ export default function ComparisonTable() {
                 <p className="text-sm text-gray-300 mb-4">Choose a format to export the comparison table.</p>
                 <div className="grid grid-cols-1 gap-3">
                   <button
+                    onClick={() => exportAs('excel')}
+                    className="w-full px-4 py-3 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white text-sm text-left flex items-center justify-between"
+                  >
+                    <span>Excel (.xlsx)</span>
+                    <span className="text-white/60">Sheet with values</span>
+                  </button>
+                  <button
                     onClick={() => exportAs('markdown')}
                     className="w-full px-4 py-3 rounded-xl border border-white/20 bg-white/5 hover:bg-white/10 text-white text-sm text-left flex items-center justify-between"
                   >
                     <span>Markdown (.md)</span>
-                    <span className="text-white/60">Table</span>
+                    <span className="text-white/60">Copy/paste friendly</span>
                   </button>
                   <button
                     onClick={() => exportAs('csv')}
@@ -882,7 +921,6 @@ export default function ComparisonTable() {
                     <span>Image (.png)</span>
                     <span className="text-white/60">Markdown render capture</span>
                   </button>
-                  
                 </div>
               </div>
             </div>
@@ -922,8 +960,50 @@ export default function ComparisonTable() {
                 <div key={indicator} className={`flex border-b border-white/10 hover:bg-white/5 transition-colors min-w-max ${
                   index % 2 === 0 ? 'bg-white/5' : 'bg-transparent'
                 }`}>
-                  <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[180px] text-base text-center">
-                    {indicator}
+                  <div className="flex-shrink-0 p-4 font-medium text-blue-300 border-r border-white/20 w-[180px] text-base relative">
+                    <div className="flex items-start">
+                      <span className="inline-block w-3 h-3" aria-hidden="true"></span>
+                      <span className="flex-1 block text-center text-xs sm:text-sm leading-tight">
+                        {indicator.includes(' (') ? (
+                          <>
+                            <span className="block">{indicator.slice(0, indicator.indexOf(' ('))}</span>
+                            <span className="block text-white/80">{indicator.slice(indicator.indexOf(' (') + 1)}</span>
+                          </>
+                        ) : (
+                          indicator
+                        )}
+                      </span>
+                      {index < 5 && (
+                        <div className="group relative ml-1">
+                          <button
+                            type="button"
+                            className={`text-gray-400 hover:text-white transition-colors ${index === 1 ? 'mt-1' : ''}`}
+                            aria-label={`More info about ${indicator}`}
+                          >
+                            <Info className="w-3 h-3" />
+                          </button>
+                          {(index === 0 || index === 1 || index === 3) && (
+                            <div className="absolute top-5 left-full ml-2 z-50 w-80 bg-neutral-900/90 backdrop-blur-sm border border-white/30 rounded-lg shadow-2xl p-3 text-[11px] sm:text-xs text-gray-100 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto text-left">
+                              {index === 0 && (
+                                <p>
+                                  Gross domestic product is the most commonly used single measure of a country&#39;s overall economic activity. It represents the total value at constant prices of final goods and services produced within a country during a specified time period, such as one year.
+                                </p>
+                              )}
+                              {index === 1 && (
+                                <p>
+                                  The end of period consumer price index (CPI) is a measure of a country&#39;s general level of prices based on the cost of a typical basket of consumer goods and services at the end of a given period. The rate of inflation is the percent change in the end of period CPI.
+                                </p>
+                              )}
+                              {index === 3 && (
+                                <p>
+                                  The number of unemployed persons as a percentage of the total labor force.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {displayedCountries.map((country) => (
                     <div key={`${country.iso3}-${index}`} className="flex-shrink-0 p-4 text-gray-300 border-r border-white/20 w-[140px] flex items-center justify-center">
